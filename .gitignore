@@ -1,0 +1,11 @@
+node_modules/
+.npm-cache/
+release/
+
+# 本地数据（文档、追问树、密钥）
+data/*
+!data/.gitkeep
+!data/config.example.json
+
+*.log
+.DS_Store
