@@ -15,6 +15,11 @@
 
 详细用法见 [使用手册](docs/使用手册.md)。
 
+## 下载
+
+- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.0-win32-x64.zip`，解压到**纯英文路径**后双击 `DocTree.exe`
+- 或从源码运行：`npm install && npm start`
+
 ## 功能
 
 | 能力 | 说明 |
