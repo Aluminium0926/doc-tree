@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal
 cd /d "%~dp0"
 set PORT=4317
@@ -14,7 +14,7 @@ if errorlevel 1 (
 netstat -ano | findstr /R /C:":%PORT% .*LISTENING" >nul
 if errorlevel 1 (
   echo [*] starting DocTree server ...
-  start "DocTreeServer" /min cmd /c "node server.mjs >> server.log 2>&1"
+  wscript //nologo "%~dp0start-hidden.vbs"
   timeout /t 2 /nobreak >nul
 ) else (
   echo [*] server already running on port %PORT%
