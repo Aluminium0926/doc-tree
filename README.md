@@ -17,7 +17,7 @@
 
 ## 下载
 
-- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.0-win32-x64.zip`，解压到**纯英文路径**后双击 `DocTree.exe`
+- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.1-win32-x64.zip`，解压后双击 **`start-doctree.vbs`**（中文路径也能用）
 - 或从源码运行：`npm install && npm start`
 
 ## 功能
@@ -82,9 +82,9 @@ npm run app     # 开发模式直接开窗口
 npm run dist    # 用 electron-packager 打包到 release/
 ```
 
-打包后是一个便携目录（`DocTree-win32-x64`），双击 `DocTree.exe` 即可。数据目录会切到 `%APPDATA%\文档树`，首次启动自动从包内 `data/` 复制。
+打包后是一个便携目录（`DocTree-win32-x64`），双击 `start-doctree.vbs` 启动。数据目录会切到 `%APPDATA%\文档树`，首次启动自动从包内 `data/` 复制。
 
-> **重要**：安装路径请保持**纯英文**。Electron 在含中文/非 ASCII 的路径下可能一启动就崩（`0x80000003`），把程序放到 `C:\Program Files\DocTree` 或 `%LOCALAPPDATA%\Programs\DocTree` 这类路径即可。
+> **中文路径**：直接双击 `DocTree.exe` 时，Electron 在某些含非 ASCII 字符的路径下会启动即崩（`0x80000003`）。`start-doctree.vbs` 会检测路径，必要时把程序复制到 `%LOCALAPPDATA%\Programs\DocTree` 再从那里启动，所以解压位置随意。
 
 ## 目录结构
 
