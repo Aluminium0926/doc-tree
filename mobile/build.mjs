@@ -39,9 +39,14 @@ copy(path.join(here, 'icon.svg'), path.join(out, 'icon.svg'))
 copy(path.join(here, 'manifest.webmanifest'), path.join(out, 'manifest.webmanifest'))
 copy(path.join(here, 'sw.js'), path.join(out, 'sw.js'))
 
+// 子路径部署（如 GitHub Pages /doc-tree/）时，把绝对资源路径改成相对
+const appJs = fs.readFileSync(path.join(out, 'app.js'), 'utf8').replace(/'\/vendor\//g, "'./vendor/")
+fs.writeFileSync(path.join(out, 'app.js'), appJs, 'utf8')
+
 // index.html：注入移动样式与引导脚本
 let html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8')
 html = html.replace(/href="\/style\.css\?v=\d+"/, 'href="./style.css"')
+html = html.replace(/"\/vendor\//g, '"./vendor/')
 html = html.replace(
   /<link rel="stylesheet" href="\.\/style\.css">/,
   '<link rel="stylesheet" href="./style.css">\n<link rel="stylesheet" href="./mobile.css">\n<link rel="manifest" href="./manifest.webmanifest">\n<meta name="theme-color" content="#0a0c11">\n<script type="module" src="./src/bootstrap.js"></script>'

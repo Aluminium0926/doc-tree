@@ -11,6 +11,18 @@
 
 支持 PDF / Word / Markdown / 纯文本。
 
+## 直接打开就能用（手机 / 平板 / 鸿蒙）
+
+**https://aluminium0926.github.io/doc-tree/**
+
+用手机浏览器打开，第一次点右上角 ⚙ 填 Base URL / API Key / 模型，之后：
+
+- 安卓 / 鸿蒙浏览器：菜单里「添加到桌面」，下次像 App 一样打开
+- 离线可用（Service Worker 缓存应用外壳，文档和追问树存在浏览器本地）
+- 不需要装 Node、不需要起服务、不需要命令行
+
+> 页面是公开的，但你的文档、问答、Key 只存在你自己浏览器的本地存储里，不会上传到任何服务器（模型请求只发给你配置的端点）。
+
 - 前端：原生 JS + PDF.js，无框架、无构建步骤
 - 后端：Node 原生 http，单文件服务
 - 模型：任意 OpenAI 兼容端点（DeepSeek / OpenAI / Ollama / 自建）

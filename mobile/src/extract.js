@@ -3,8 +3,8 @@ let pdfjsPromise = null
 
 async function pdfjs() {
   if (!pdfjsPromise) {
-    pdfjsPromise = import('/vendor/pdf.min.mjs').then((m) => {
-      m.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.wrapper.mjs'
+    pdfjsPromise = import('./vendor/pdf.min.mjs').then((m) => {
+      m.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.wrapper.mjs'
       return m
     })
   }
@@ -40,7 +40,7 @@ async function extractPdf(buf) {
   const pdfjsLib = await pdfjs()
   const pdf = await pdfjsLib.getDocument({
     data: new Uint8Array(buf),
-    cMapUrl: '/vendor/cmaps/',
+    cMapUrl: './vendor/cmaps/',
     cMapPacked: true,
     isEvalSupported: false
   }).promise
@@ -69,7 +69,7 @@ function loadScript(src) {
 }
 
 async function extractDocx(buf) {
-  if (!window.mammoth) await loadScript('/vendor/mammoth.browser.min.js')
+  if (!window.mammoth) await loadScript('./vendor/mammoth.browser.min.js')
   const r = await window.mammoth.extractRawText({ arrayBuffer: buf })
   const text = normalize(r.value || '')
   return { kind: 'docx', pages: [{ no: 1, text }] }

@@ -1,17 +1,18 @@
 // 离线缓存：应用外壳优先缓存，接口与模型代理走网络
-const CACHE = 'doctree-v1'
+const CACHE = 'doctree-v2'
 const SHELL = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/style.css',
-  '/mobile.css',
-  '/icon.svg',
-  '/manifest.webmanifest',
-  '/vendor/pdf.min.mjs',
-  '/vendor/pdf.worker.min.mjs',
-  '/vendor/marked.esm.js',
-  '/vendor/mammoth.browser.min.js'
+  './',
+  './index.html',
+  './app.js',
+  './style.css',
+  './mobile.css',
+  './icon.svg',
+  './manifest.webmanifest',
+  './vendor/pdf.min.mjs',
+  './vendor/pdf.worker.wrapper.mjs',
+  './vendor/pdf.worker.min.mjs',
+  './vendor/marked.esm.js',
+  './vendor/mammoth.browser.min.js'
 ]
 
 self.addEventListener('install', (e) => {

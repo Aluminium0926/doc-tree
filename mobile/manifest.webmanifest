@@ -2,13 +2,13 @@
   "name": "文档树 · DocTree",
   "short_name": "文档树",
   "description": "本地文档阅读器：划词提问，回答可继续追问，形成锚定原文的树",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0a0c11",
   "theme_color": "#0a0c11",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }
