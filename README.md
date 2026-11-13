@@ -102,7 +102,7 @@ npm run dist    # 用 electron-packager 打包到 release/
 - **安卓 APK**：[Releases](https://github.com/Aluminium0926/doc-tree/releases) 里的 `DocTree-android.apk`（约 2.6 MB，minSdk 24）
   - 独立运行：WebView + 应用内本地服务，数据存 IndexedDB，模型请求经本地代理转发
   - 构建与架构见 [安卓与鸿蒙](docs/安卓与鸿蒙.md)
-- **HarmonyOS NEXT**：APK 不能直接运行（鸿蒙 NEXT 不再兼容 AOSP）。同一套前端已做移动适配并支持 PWA，可在鸿蒙浏览器「添加到桌面」；用 ArkTS `Web` 组件套壳也可复用 `mobile/www`，详见文档。
+- **HarmonyOS NEXT**：系统原生不认 APK；装了「卓易通」这类安卓兼容层后可以试 APK。不想装兼容层就用 `web-v1.0.0` 的静态包（移动适配 + PWA，可添加到桌面）；用 ArkTS `Web` 组件套壳也可复用 `mobile/www`，详见文档。
 
 ## 目录结构
 
