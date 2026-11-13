@@ -46,6 +46,7 @@ button.ghost { background: transparent; }
 input, textarea {
   font: inherit;
   color: var(--text);
+  caret-color: var(--text);
   background: #0c0f15;
   border: 1px solid var(--line);
   border-radius: 10px;

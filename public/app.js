@@ -11,7 +11,7 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v31'
+const UI_VERSION = 'v32'
 console.log('[DocTree] UI', UI_VERSION)
 
 // 先抽出公式占位，Markdown 渲染完再交给 KaTeX，避免换行/<br> 把 $$ 块切碎

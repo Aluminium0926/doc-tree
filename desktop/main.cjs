@@ -19,6 +19,17 @@ function log(msg) {
   } catch {}
 }
 
+// 测试/多实例可用独立数据目录，不影响正在用的那份
+if (process.env.DOCTREE_USERDATA) {
+  try {
+    fs.mkdirSync(process.env.DOCTREE_USERDATA, { recursive: true })
+    app.setPath('userData', process.env.DOCTREE_USERDATA)
+    log('userData override -> ' + process.env.DOCTREE_USERDATA)
+  } catch (e) {
+    log('userData override failed: ' + e.message)
+  }
+}
+
 function failBox(title, detail) {
   try {
     dialog.showErrorBox(title, `${detail}\n\n日志：${LOG_FILE}`)
@@ -109,7 +120,15 @@ function createWindow() {
   mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
     log(`did-fail-load ${code} ${desc}`)
   })
-  mainWindow.webContents.on('did-finish-load', () => log('did-finish-load'))
+  mainWindow.webContents.on('did-finish-load', () => {
+    log('did-finish-load')
+    // 启动后主动拿一次焦点，避免窗口开在前台但没有键盘焦点（输入框不显示光标）
+    try {
+      mainWindow.show()
+      mainWindow.focus()
+      mainWindow.webContents.focus()
+    } catch {}
+  })
   mainWindow.on('close', saveBounds)
   mainWindow.on('closed', () => (mainWindow = null))
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
