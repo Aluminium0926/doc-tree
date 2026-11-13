@@ -1,6 +1,15 @@
 # 文档树 · DocTree
 
-本地文档阅读器：导入 PDF / Word / Markdown / 纯文本，边读边划词提问，**回答还能继续追问，形成一棵锚定原文的树**。
+**选中就问，问过还在。**
+
+上课听不懂的那一句、论文卡住的那一段——选中它，点「用这段提问」，回车。
+不用截图、不用复制粘贴、不用切屏，连问题都可以不打。
+
+答案贴在那行字旁边；在回答里继续选中还能追问。
+每个问题都记着自己锚在原文第几页、哪一句，长成一棵树，而不是一条滚不到头的聊天记录。
+下次翻回这一页，问过的都还在。
+
+支持 PDF / Word / Markdown / 纯文本。
 
 - 前端：原生 JS + PDF.js，无框架、无构建步骤
 - 后端：Node 原生 http，单文件服务
@@ -17,7 +26,7 @@
 
 ## 下载
 
-- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.1-win32-x64.zip`，解压后双击 **`start-doctree.vbs`**（中文路径也能用）
+- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.2-win32-x64.zip`，解压后双击 **`start-doctree.vbs`**（中文路径也能用）
 - 或从源码运行：`npm install && npm start`
 
 ## 功能
