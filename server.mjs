@@ -308,6 +308,8 @@ const server = http.createServer(async (req, res) => {
 })
 
 await store.ensureDirs()
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`文档树已启动 → http://127.0.0.1:${PORT}`)
+const HOST = process.env.HOST || '127.0.0.1'
+server.listen(PORT, HOST, () => {
+  const shown = HOST === '0.0.0.0' ? '0.0.0.0（局域网可访问）' : HOST
+  console.log(`文档树已启动 → http://${shown}:${PORT}`)
 })

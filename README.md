@@ -26,8 +26,10 @@
 
 ## 下载
 
-- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.3-win32-x64.zip`，解压后双击 **`start-doctree.vbs`**（中文路径也能用）
-- 或从源码运行：`npm install && npm start`
+- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases) 里的 `DocTree-1.0.3-win32-x64.zip`，解压后双击 **`start-doctree.vbs`**（中文路径也能用）
+- **安卓**：`android-v1.0.2` 里的 `DocTree-android.apk`（鸿蒙 NEXT **不能**装 APK）
+- **鸿蒙 / 浏览器**：`web-v1.0.0` 里的 `DocTree-web-v1.0.0.zip`——解压后用任意静态服务器托管，鸿蒙浏览器打开并「添加到桌面」
+- 或从源码运行：`npm install && npm start`（`HOST=0.0.0.0 npm start` 可让同局域网手机访问）
 
 ## 功能
 
