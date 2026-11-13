@@ -139,27 +139,58 @@ function createWindow() {
 }
 
 function buildMenu() {
-  const template = [
-    {
-      label: '文件',
+  const isMac = process.platform === 'darwin'
+  const template = []
+
+  // macOS 需要 App 菜单与「编辑」菜单，否则 Cmd+C/V 不可用
+  if (isMac) {
+    template.push({
+      label: app.name,
       submenu: [
-        { label: '打开数据目录', click: () => shell.openPath(app.getPath('userData')) },
+        { role: 'about', label: '关于 文档树' },
         { type: 'separator' },
-        { role: 'quit', label: '退出' }
+        { role: 'hide', label: '隐藏' },
+        { role: 'hideOthers', label: '隐藏其他' },
+        { role: 'unhide', label: '显示全部' },
+        { type: 'separator' },
+        { role: 'quit', label: '退出 文档树' }
       ]
-    },
-    {
-      label: '视图',
+    })
+    template.push({
+      label: '编辑',
       submenu: [
-        { role: 'reload', label: '重新加载' },
-        { role: 'forceReload', label: '强制重载' },
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
         { type: 'separator' },
-        { role: 'toggleDevTools', label: '开发者工具' },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: '全屏' }
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' }
       ]
-    }
-  ]
+    })
+  }
+
+  template.push({
+    label: '文件',
+    submenu: [
+      { label: '打开数据目录', click: () => shell.openPath(app.getPath('userData')) },
+      { type: 'separator' },
+      { role: 'quit', label: '退出' }
+    ]
+  })
+
+  template.push({
+    label: '视图',
+    submenu: [
+      { role: 'reload', label: '重新加载' },
+      { role: 'forceReload', label: '强制重载' },
+      { type: 'separator' },
+      { role: 'toggleDevTools', label: '开发者工具' },
+      { type: 'separator' },
+      { role: 'togglefullscreen', label: '全屏' }
+    ]
+  })
+
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 

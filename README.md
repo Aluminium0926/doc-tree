@@ -11,7 +11,7 @@
 
 支持 PDF / Word / Markdown / 纯文本，电脑和手机都能用。
 
-## 五种用法
+## 六种用法
 
 | 平台 | 怎么用 | 说明 |
 |---|---|---|
@@ -20,6 +20,7 @@
 | **安卓** | 下载 `android-v1.0.2` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
 | **鸿蒙 NEXT** | 用系统自带的**卓易通**安装同一个 APK；不装就用上面的网页版 | 卓易通提供安卓运行时，装完 APK 可当普通 App 用 |
 | **Windows** | 下载 `DocTree-1.0.3-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
+| **macOS** | 网页版开箱可用；原生 `.app` 用 `bash scripts/build-macos.sh` 在 Mac 上构建 | 未公证，首次需右键「打开」 |
 | 开发者 | `npm install && npm start` | 起本地服务端，`HOST=0.0.0.0` 可让局域网手机访问 |
 
 ### 网页版最省事
@@ -136,14 +137,39 @@ npm run dist    # 用 electron-packager 打包到 release/
 
 > **中文路径**：直接双击 `DocTree.exe` 时，Electron 在某些含非 ASCII 字符的路径下会启动即崩（`0x80000003`）。`start-doctree.vbs` 会检测路径，必要时把程序复制到 `%LOCALAPPDATA%\Programs\DocTree` 再从那里启动，所以解压位置随意。
 
-## 手机 / 安卓 / 鸿蒙
+## 各平台细节
+
+### 手机 / 安卓 / 鸿蒙
 
 - **网页版（最省事）**：https://aluminium0926.github.io/doc-tree/
 - **安卓 APK**：`android-v1.0.2` 里的 `DocTree-android.apk`
   - WebView + 应用内本地服务（`127.0.0.1:47201`），数据存 IndexedDB，模型请求经本地代理
   - 架构与构建步骤见 [安卓与鸿蒙](docs/安卓与鸿蒙.md)
 - **HarmonyOS NEXT**：系统自带**卓易通**（安卓运行时），用它安装同一个 APK 即可，装完就是一个普通 App。不装就用网页版（PWA 可添加到桌面）；用 ArkTS `Web` 组件套壳也能复用 `mobile/www`
+- **iOS**：Safari 打开网页版 → 分享 → 添加到主屏幕；长按选中提问、导出、存储持久化都做了适配
 - **自建自托管**：`DocTree-web-v1.0.0.zip` 解压后任意静态服务器托管；`HOST=0.0.0.0 node mobile/static-server.mjs` 会打印手机可访问地址
+
+### macOS
+
+三种方式，按省事程度排：
+
+1. **网页版**：Safari / Chrome 打开 https://aluminium0926.github.io/doc-tree/ ，Chrome 可「安装应用」，Safari 17+ 可「添加到程序坞」。
+2. **源码运行**：`npm install && npm start`（Node），或 `npm run app` 直接开 Electron 窗口。
+3. **原生 `.app`**：在 Mac 上执行
+
+   ```bash
+   bash scripts/build-macos.sh arm64    # Apple Silicon；Intel 用 x64
+   ```
+
+   产物在 `release-mac/DocTree-mac-arm64.zip`。脚本会做本地临时签名；**没有 Apple 公证**，首次打开若被 Gatekeeper 拦，右键「打开」或执行：
+
+   ```bash
+   xattr -dr com.apple.quarantine "release-mac/DocTree-darwin-arm64/DocTree.app"
+   ```
+
+macOS 上窗口菜单已补 App 菜单与「编辑」菜单（Cmd+C / Cmd+V / Cmd+Z 可用），数据目录在 `~/Library/Application Support/文档树`。
+
+> 为什么没有现成的 mac 安装包：Electron 的 `.app` 依赖框架符号链接与可执行权限，必须在 macOS 上打包；这台开发机是 Windows，且 GitHub Actions 的 macOS runner 在当前账号上不可用（实测任务被系统直接取消）。所以提供构建脚本，在任意一台 Mac 上 3 分钟即可出包。
 
 ## 目录结构
 
