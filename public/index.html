@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>文档树 · DocTree</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/style.css?v=25">
+<link rel="stylesheet" href="/style.css?v=31">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 </head>
 <body>
@@ -72,12 +72,12 @@
       <button id="search-close" class="icon" title="关闭（Esc）">×</button>
     </div>
     <div id="resizer-left" class="resizer" title="拖动调节宽度 · 双击复位"></div>
-    <div id="resizer-right" class="resizer" title="拖动调节宽度 · 双击复位"></div>
     <div id="hint">从左侧导入或选择一份文档，然后选中文字提问</div>
     <div id="toast" hidden></div>
   </main>
 
   <aside id="sidebar">
+    <div id="resizer-in" class="resizer resizer-in" title="拖动调节宽度 · 双击复位"></div>
     <header class="sb-head">
       <span>追问树 <em id="node-count"></em></span>
       <div class="sb-actions">
@@ -130,6 +130,6 @@
 </div>
 
 <script src="/vendor/katex/katex.min.js"></script>
-<script type="module" src="/app.js?v=25"></script>
+<script type="module" src="/app.js?v=31"></script>
 </body>
 </html>

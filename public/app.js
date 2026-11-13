@@ -1,4 +1,4 @@
-import { marked } from '/vendor/marked.esm.js'
+﻿import { marked } from '/vendor/marked.esm.js'
 marked.setOptions({ gfm: true, breaks: true })
 
 const $ = (s, r = document) => r.querySelector(s)
@@ -11,7 +11,7 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v25'
+const UI_VERSION = 'v31'
 console.log('[DocTree] UI', UI_VERSION)
 
 // 先抽出公式占位，Markdown 渲染完再交给 KaTeX，避免换行/<br> 把 $$ 块切碎
@@ -146,16 +146,40 @@ function currentCols() {
 }
 
 function bindResizers() {
-  for (const side of ['left', 'right']) {
-    const el = $(`#resizer-${side}`)
-    if (!el) continue
-    el.addEventListener('mousedown', (e) => startResize(side, e))
+  const rightStrips = [$('#resizer-in')].filter(Boolean)
+  const syncComposerGap = () => {
+    const c = $('#composer')
+    if (!c) return
+    const gap = Math.round(c.offsetHeight + 10) + 'px'
+    for (const rz of rightStrips) rz.style.bottom = gap
+  }
+  syncComposerGap()
+  if (window.ResizeObserver && $('#composer')) {
+    new ResizeObserver(syncComposerGap).observe($('#composer'))
+  }
+  window.addEventListener('resize', syncComposerGap)
+
+  const attach = (el, side) => {
+    if (!el) return
+    el.addEventListener('mousedown', (e) => {
+      // 输入框（含思考强度滑块）范围内一律不算拖分栏
+      const composer = $('#composer')
+      if (composer) {
+        const c = composer.getBoundingClientRect()
+        if (e.clientX >= c.left - 4 && e.clientX <= c.right + 4 && e.clientY >= c.top - 4 && e.clientY <= c.bottom + 4) return
+      }
+      if (e.target instanceof Element && e.target.closest('#composer')) return
+      startResize(side, e)
+    })
     el.addEventListener('dblclick', () => {
       $('#app').style.setProperty(side === 'left' ? '--left' : '--right', (side === 'left' ? DEFAULT_LEFT : DEFAULT_RIGHT) + 'px')
       localStorage.removeItem(side === 'left' ? 'dt:leftw' : 'dt:rightw')
       refitPdf()
     })
   }
+
+  attach($('#resizer-left'), 'left')
+  attach($('#resizer-in'), 'right')
 }
 
 function startResize(side, e) {
@@ -163,7 +187,8 @@ function startResize(side, e) {
   if (side === 'left' && app.classList.contains('collapsed')) return
   e.preventDefault()
 
-  const el = $(`#resizer-${side}`)
+  const el = side === 'right' ? ($('#resizer-in') || $('#resizer-right')) : $(`#resizer-${side}`)
+  if (!el) return
   const [l0, , r0] = currentCols()
   const x0 = e.clientX
   el.classList.add('dragging')
