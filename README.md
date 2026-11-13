@@ -11,12 +11,13 @@
 
 支持 PDF / Word / Markdown / 纯文本，电脑和手机都能用。
 
-## 三种用法
+## 四种用法
 
 | 平台 | 怎么用 | 说明 |
 |---|---|---|
-| **手机 / 平板 / 鸿蒙** | 打开 **https://aluminium0926.github.io/doc-tree/** ，「添加到桌面」 | 零安装，数据存浏览器本地，可离线 |
+| **手机 / 平板浏览器** | 打开 **https://aluminium0926.github.io/doc-tree/** ，「添加到桌面」 | 零安装，数据存浏览器本地，可离线 |
 | **安卓** | 下载 `android-v1.0.2` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
+| **鸿蒙 NEXT** | 用系统自带的**卓易通**安装同一个 APK；不装就用上面的网页版 | 卓易通提供安卓运行时，装完 APK 可当普通 App 用 |
 | **Windows** | 下载 `DocTree-1.0.3-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
 | 开发者 | `npm install && npm start` | 起本地服务端，`HOST=0.0.0.0` 可让局域网手机访问 |
 
@@ -136,11 +137,11 @@ npm run dist    # 用 electron-packager 打包到 release/
 
 ## 手机 / 安卓 / 鸿蒙
 
-- **网页版（推荐）**：https://aluminium0926.github.io/doc-tree/
+- **网页版（最省事）**：https://aluminium0926.github.io/doc-tree/
 - **安卓 APK**：`android-v1.0.2` 里的 `DocTree-android.apk`
   - WebView + 应用内本地服务（`127.0.0.1:47201`），数据存 IndexedDB，模型请求经本地代理
   - 架构与构建步骤见 [安卓与鸿蒙](docs/安卓与鸿蒙.md)
-- **HarmonyOS NEXT**：系统原生不认 APK；装了「卓易通」这类安卓兼容层可以试 APK。不装兼容层就用网页版（PWA 可添加到桌面）；用 ArkTS `Web` 组件套壳也能复用 `mobile/www`
+- **HarmonyOS NEXT**：系统自带**卓易通**（安卓运行时），用它安装同一个 APK 即可，装完就是一个普通 App。不装就用网页版（PWA 可添加到桌面）；用 ArkTS `Web` 组件套壳也能复用 `mobile/www`
 - **自建自托管**：`DocTree-web-v1.0.0.zip` 解压后任意静态服务器托管；`HOST=0.0.0.0 node mobile/static-server.mjs` 会打印手机可访问地址
 
 ## 目录结构
