@@ -1,10 +1,11 @@
 ﻿// 移动端文档解析：PDF(pdf.js) / DOCX(mammoth) / 文本
+const VENDOR = new URL('../vendor/', import.meta.url).href
 let pdfjsPromise = null
 
 async function pdfjs() {
   if (!pdfjsPromise) {
-    pdfjsPromise = import('./vendor/pdf.min.mjs').then((m) => {
-      m.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.wrapper.mjs'
+    pdfjsPromise = import(VENDOR + 'pdf.min.mjs').then((m) => {
+      m.GlobalWorkerOptions.workerSrc = VENDOR + 'pdf.worker.wrapper.mjs'
       return m
     })
   }
@@ -40,7 +41,7 @@ async function extractPdf(buf) {
   const pdfjsLib = await pdfjs()
   const pdf = await pdfjsLib.getDocument({
     data: new Uint8Array(buf),
-    cMapUrl: './vendor/cmaps/',
+    cMapUrl: VENDOR + 'cmaps/',
     cMapPacked: true,
     isEvalSupported: false
   }).promise
@@ -69,7 +70,7 @@ function loadScript(src) {
 }
 
 async function extractDocx(buf) {
-  if (!window.mammoth) await loadScript('./vendor/mammoth.browser.min.js')
+  if (!window.mammoth) await loadScript(VENDOR + 'mammoth.browser.min.js')
   const r = await window.mammoth.extractRawText({ arrayBuffer: buf })
   const text = normalize(r.value || '')
   return { kind: 'docx', pages: [{ no: 1, text }] }

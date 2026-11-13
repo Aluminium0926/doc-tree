@@ -38,7 +38,7 @@ window.addEventListener('orientationchange', () => setTimeout(mobileChrome, 200)
 
 // 浏览器/PWA 场景注册离线缓存（APK 内有桥接对象，不需要）
 if (!window.DocTreeAndroid && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {})
+  navigator.serviceWorker.register(new URL('../sw.js', import.meta.url).href).catch(() => {})
 }
 
 console.log('[DocTree] local mode ready')

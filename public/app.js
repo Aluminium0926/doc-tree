@@ -1,5 +1,8 @@
-﻿import { marked } from '/vendor/marked.esm.js'
+﻿import { marked } from './vendor/marked.esm.js'
 marked.setOptions({ gfm: true, breaks: true })
+
+// 静态资源基址：兼容「根路径」和「子路径部署」（如 GitHub Pages /doc-tree/）
+const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const $ = (s, r = document) => r.querySelector(s)
 const esc = (s) =>
@@ -408,12 +411,12 @@ async function openDoc(id) {
 
 /* ================= PDF 渲染 ================= */
 async function renderPdf() {
-  S.pdfjs ??= await import('/vendor/pdf.min.mjs')
-  S.pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.wrapper.mjs'
+  S.pdfjs ??= await import(VENDOR + 'pdf.min.mjs')
+  S.pdfjs.GlobalWorkerOptions.workerSrc = VENDOR + 'pdf.worker.wrapper.mjs'
   const src = window.DT_LOCAL ? await window.DTLocal.fileUrl(S.doc.id) : `/api/file/${S.doc.id}`
   const pdf = await S.pdfjs.getDocument({
     url: src,
-    cMapUrl: '/vendor/cmaps/',
+    cMapUrl: VENDOR + 'cmaps/',
     cMapPacked: true
   }).promise
   S.pdf = pdf
