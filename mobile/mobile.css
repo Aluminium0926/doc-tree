@@ -1,4 +1,6 @@
 /* 移动端适配：竖屏下文档区在上、追问树在下，文档库改为抽屉 */
+#btn-mobile-lib, #lib-backdrop { display: none; }
+
 @media (max-width: 900px) {
   html, body { height: 100%; }
   #app {

@@ -1,10 +1,10 @@
-// 移动端文档解析：PDF(pdf.js) / DOCX(mammoth) / 文本
+﻿// 移动端文档解析：PDF(pdf.js) / DOCX(mammoth) / 文本
 let pdfjsPromise = null
 
 async function pdfjs() {
   if (!pdfjsPromise) {
     pdfjsPromise = import('/vendor/pdf.min.mjs').then((m) => {
-      m.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs'
+      m.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.wrapper.mjs'
       return m
     })
   }

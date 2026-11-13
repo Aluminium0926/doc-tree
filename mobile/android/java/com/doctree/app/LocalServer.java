@@ -27,8 +27,21 @@ public class LocalServer {
     }
 
     public int start() throws IOException {
-        socket = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
-        port = socket.getLocalPort();
+        // 固定端口：WebView 的 localStorage / IndexedDB 按 origin（含端口）隔离，
+        // 每次换端口会导致用户数据“消失”，所以优先用固定端口。
+        int[] preferred = {47201, 47202, 47203};
+        for (int p : preferred) {
+            try {
+                socket = new ServerSocket(p, 50, InetAddress.getByName("127.0.0.1"));
+                port = p;
+                break;
+            } catch (IOException ignored) {
+            }
+        }
+        if (socket == null) {
+            socket = new ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"));
+            port = socket.getLocalPort();
+        }
         Thread t = new Thread(new LoopTask(), "doctree-server");
         t.setDaemon(true);
         t.start();

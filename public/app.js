@@ -11,7 +11,7 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v32'
+const UI_VERSION = 'v34'
 console.log('[DocTree] UI', UI_VERSION)
 
 // 先抽出公式占位，Markdown 渲染完再交给 KaTeX，避免换行/<br> 把 $$ 块切碎
@@ -409,9 +409,10 @@ async function openDoc(id) {
 /* ================= PDF 渲染 ================= */
 async function renderPdf() {
   S.pdfjs ??= await import('/vendor/pdf.min.mjs')
-  S.pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs'
+  S.pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.wrapper.mjs'
+  const src = window.DT_LOCAL ? await window.DTLocal.fileUrl(S.doc.id) : `/api/file/${S.doc.id}`
   const pdf = await S.pdfjs.getDocument({
-    url: `/api/file/${S.doc.id}`,
+    url: src,
     cMapUrl: '/vendor/cmaps/',
     cMapPacked: true
   }).promise
@@ -1757,6 +1758,7 @@ function bind() {
 
   $('#btn-export').addEventListener('click', () => {
     if (!S.doc) return toast('先打开文档')
+    if (window.DT_LOCAL) return window.DTLocal.downloadExport(S.doc.id)
     location.href = `/api/export/${S.doc.id}`
   })
   $('#btn-treeview').addEventListener('click', openTreeView)

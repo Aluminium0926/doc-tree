@@ -1,4 +1,4 @@
-# Build Android APK without Gradle (stage into ASCII path: aapt2 can't handle CJK paths)
+﻿# Build Android APK without Gradle (stage into ASCII path: aapt2 can't handle CJK paths)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Split-Path -Parent $here
@@ -83,7 +83,7 @@ $aligned = Join-Path $stage 'aligned.apk'
 if ($LASTEXITCODE -ne 0) { throw 'zipalign failed' }
 
 Write-Host '[6/6] sign'
-$ks = Join-Path $stage 'debug.keystore'
+$ks = Join-Path $here 'debug.keystore'
 if (-not (Test-Path $ks)) {
   $ktArgs = @('-genkeypair', '-keystore', $ks, '-storepass', 'android', '-keypass', 'android',
     '-alias', 'doctree', '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000',
