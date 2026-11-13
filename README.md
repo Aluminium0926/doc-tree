@@ -11,11 +11,12 @@
 
 支持 PDF / Word / Markdown / 纯文本，电脑和手机都能用。
 
-## 四种用法
+## 五种用法
 
 | 平台 | 怎么用 | 说明 |
 |---|---|---|
 | **手机 / 平板浏览器** | 打开 **https://aluminium0926.github.io/doc-tree/** ，「添加到桌面」 | 零安装，数据存浏览器本地，可离线 |
+| **iOS** | Safari 打开同一网址 → 分享 → 添加到主屏幕 | 不需要 App Store，长按选中提问已适配 |
 | **安卓** | 下载 `android-v1.0.2` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
 | **鸿蒙 NEXT** | 用系统自带的**卓易通**安装同一个 APK；不装就用上面的网页版 | 卓易通提供安卓运行时，装完 APK 可当普通 App 用 |
 | **Windows** | 下载 `DocTree-1.0.3-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |

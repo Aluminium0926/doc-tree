@@ -2,11 +2,12 @@
 #btn-mobile-lib, #lib-backdrop { display: none; }
 
 @media (max-width: 900px) {
-  html, body { height: 100%; }
+  html, body { height: 100%; -webkit-text-size-adjust: 100%; }
   #app {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
+    height: 100vh;   /* 旧 Safari 兜底 */
     height: 100dvh;
     overflow: hidden;
   }

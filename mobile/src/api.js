@@ -264,8 +264,16 @@ export async function downloadExport(docId) {
     window.DocTreeAndroid.saveText(name, md)
     return
   }
+  const blobUrl = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
+  // iOS Safari 对 blob 的 download 支持不稳，直接新开一页让用户「存储到文件」
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  if (isIOS) {
+    const w = window.open(blobUrl, '_blank')
+    if (!w) location.href = blobUrl
+    return
+  }
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }))
+  a.href = blobUrl
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 5000)

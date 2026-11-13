@@ -1,4 +1,4 @@
-﻿import { marked } from './vendor/marked.esm.js'
+import { marked } from './vendor/marked.esm.js'
 marked.setOptions({ gfm: true, breaks: true })
 
 // 静态资源基址：兼容「根路径」和「子路径部署」（如 GitHub Pages /doc-tree/）
@@ -1657,6 +1657,28 @@ function bind() {
   document.addEventListener('mousedown', (e) => {
     if (!(e.target instanceof Element) || !e.target.closest('#float-menu')) hideFloat()
   })
+
+  // iOS Safari：长按选中后不触发 mouseup，用 touchend 补一次浮层
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  if (isIOS) {
+    document.addEventListener(
+      'touchend',
+      (e) => {
+        const t = e.target
+        if (
+          t instanceof Element &&
+          (t.closest('#float-menu') || t.closest('#toolbar') || t.closest('#composer') || t.closest('#search-bar'))
+        ) {
+          return
+        }
+        setTimeout(() => {
+          const sel = window.getSelection()
+          if (sel && !sel.isCollapsed && sel.toString().trim()) onMouseUp(e)
+        }, 260)
+      },
+      { passive: true }
+    )
+  }
 
   $('#btn-zoom-in').addEventListener('click', () => setZoom(S.zoom + 0.1))
   $('#btn-zoom-out').addEventListener('click', () => setZoom(S.zoom - 0.1))
