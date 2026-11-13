@@ -95,6 +95,13 @@ npm run dist    # 用 electron-packager 打包到 release/
 
 > **中文路径**：直接双击 `DocTree.exe` 时，Electron 在某些含非 ASCII 字符的路径下会启动即崩（`0x80000003`）。`start-doctree.vbs` 会检测路径，必要时把程序复制到 `%LOCALAPPDATA%\Programs\DocTree` 再从那里启动，所以解压位置随意。
 
+## 手机 / 安卓 / 鸿蒙
+
+- **安卓 APK**：[Releases](https://github.com/Aluminium0926/doc-tree/releases) 里的 `DocTree-android.apk`（约 2.6 MB，minSdk 24）
+  - 独立运行：WebView + 应用内本地服务，数据存 IndexedDB，模型请求经本地代理转发
+  - 构建与架构见 [安卓与鸿蒙](docs/安卓与鸿蒙.md)
+- **HarmonyOS NEXT**：APK 不能直接运行（鸿蒙 NEXT 不再兼容 AOSP）。同一套前端已做移动适配并支持 PWA，可在鸿蒙浏览器「添加到桌面」；用 ArkTS `Web` 组件套壳也可复用 `mobile/www`，详见文档。
+
 ## 目录结构
 
 ```

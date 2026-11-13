@@ -7,5 +7,12 @@ data/*
 !data/.gitkeep
 !data/config.example.json
 
+# 移动端构建产物
+mobile/www/
+mobile-build/
+mobile/*.apk
+mobile/*.keystore
+*.keystore
+
 *.log
 .DS_Store
