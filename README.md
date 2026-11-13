@@ -26,7 +26,7 @@
 
 ## 下载
 
-- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.2-win32-x64.zip`，解压后双击 **`start-doctree.vbs`**（中文路径也能用）
+- **Windows 便携版**：[Releases](https://github.com/Aluminium0926/doc-tree/releases/latest) 下载 `DocTree-1.0.3-win32-x64.zip`，解压后双击 **`start-doctree.vbs`**（中文路径也能用）
 - 或从源码运行：`npm install && npm start`
 
 ## 功能
