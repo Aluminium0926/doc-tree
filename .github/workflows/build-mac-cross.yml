@@ -1,4 +1,4 @@
-name: build-mac-cross
+﻿name: build-mac-cross
 
 on:
   workflow_dispatch:
@@ -80,11 +80,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="mac-$ARCH-v1.0.0"
+          TAG="mac-$ARCH-v1.0.1"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "release-mac/DocTree-mac-$ARCH.zip" --clobber
           else
             gh release create "$TAG" "release-mac/DocTree-mac-$ARCH.zip" \
-              --title "DocTree macOS $ARCH v1.0.0" \
+              --title "DocTree macOS $ARCH v1.0.1" \
               --notes "macOS 版（$ARCH），在 Ubuntu 上交叉构建，未签名未公证。解压后双击「首次打开.command」，它会自动去隔离、做本地临时签名并启动。"
           fi
