@@ -1,0 +1,177 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文档树 · DocTree</title>
+<link rel="icon" href="data:,">
+<meta name="theme-color" content="#0a0c11">
+<script src="./theme.js"></script>
+<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./mobile.css">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0a0c11">
+<script type="module" src="./src/bootstrap.js"></script>
+<link rel="stylesheet" href="./vendor/katex/katex.min.css">
+<link id="hljs-theme" rel="stylesheet" href="./vendor/highlight/atom-one-dark.min.css">
+<script src="./vendor/highlight/highlight.min.js" defer></script>
+</head>
+<body>
+<div id="app">
+  <aside id="library">
+    <div class="rail">
+      <button id="btn-expand" title="展开文件列表（Ctrl+B）">»</button>
+      <span>文档</span>
+    </div>
+    <div class="lib-head">
+      <span class="logo">文档树</span>
+      <div class="lib-actions">
+        <button id="btn-settings" class="icon" title="设置">⚙</button>
+        <button id="btn-collapse" class="icon" title="收起文件列表（Ctrl+B）">«</button>
+      </div>
+    </div>
+    <label class="import">
+      <input type="file" id="file-input" accept=".pdf,.docx,.md,.markdown,.txt" multiple hidden>
+      <span>＋ 导入文档</span>
+    </label>
+    <div class="lib-tip">支持 PDF / Word / Markdown / TXT</div>
+    <div id="doc-list"></div>
+    <div class="lib-foot"><span class="dot"></span>本地运行 · 数据不出本机</div>
+  </aside>
+
+  <main id="viewer">
+    <header id="toolbar">
+      <div class="tb-left">
+        <div class="tb-title" id="doc-title">未打开文档</div>
+        <div class="tb-meta" id="doc-meta"></div>
+      </div>
+      <div class="tb-actions">
+        <div class="zoom-group">
+          <button id="btn-zoom-out" class="icon" title="缩小"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button>
+          <span id="zoom-label">100%</span>
+          <button id="btn-zoom-in" class="icon" title="放大"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
+        </div>
+        <div class="page-nav" id="page-nav" hidden>
+          <button id="btn-prev" class="icon" title="上一页（←）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+          <input id="page-input" value="1" inputmode="numeric" aria-label="页码">
+          <span class="page-total">/ <span id="page-total">0</span></span>
+          <button id="btn-next" class="icon" title="下一页（→）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+        </div>
+        <button id="btn-search" class="icon" title="搜索文档（Ctrl+F）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg></button>
+        <button id="btn-rotate" class="icon" title="顺时针旋转 90°"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+        <button id="btn-theme" class="icon" title="页面配色"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg></button>
+        <div class="tool-group">
+          <button id="btn-hl" class="tool" title="荧光笔：开启后选中文字即高亮">荧光笔</button>
+          <button id="btn-eraser" class="tool" title="擦除：点一下高亮即可删除">擦除</button>
+          <div class="hl-colors" id="hl-colors" hidden>
+            <button class="dot" data-color="#ffe066" title="黄"></button>
+            <button class="dot" data-color="#9be8a0" title="绿"></button>
+            <button class="dot" data-color="#ffb3c7" title="粉"></button>
+          </div>
+        </div>
+        <button id="btn-shot" class="ghost" title="拖拽框选一块区域，松手自动发送">框选截图</button>
+      </div>
+    </header>
+    <div id="page-scroll"><div id="pages"></div></div>
+    <div id="search-bar" hidden>
+      <input id="search-input" placeholder="在文档中搜索（Ctrl+F）" autocomplete="off">
+      <span id="search-count">0/0</span>
+      <button id="search-prev" class="icon" title="上一个（Shift+Enter）">↑</button>
+      <button id="search-next" class="icon" title="下一个（Enter）">↓</button>
+      <button id="search-close" class="icon" title="关闭（Esc）">×</button>
+    </div>
+    <div id="resizer-left" class="resizer" title="拖动调节宽度 · 双击复位"></div>
+    <div id="hint">从左侧导入或选择一份文档，然后选中文字提问</div>
+    <div id="toast" hidden></div>
+  </main>
+
+  <aside id="sidebar">
+    <div id="resizer-in" class="resizer resizer-in" title="拖动调节宽度 · 双击复位"></div>
+    <header class="sb-head">
+      <span>追问树 <em id="node-count"></em></span>
+      <div class="sb-actions">
+        <button id="btn-treeview" class="icon" title="树状图"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="6" rx="1.5"/><rect x="14" y="15" width="7" height="6" rx="1.5"/><path d="M6.5 9v6.5a2 2 0 0 0 2 2H14"/></svg></button>
+        <button id="btn-export" class="icon" title="导出 Markdown"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg></button>
+      </div>
+    </header>
+    <div id="tree"><div class="tree-empty">还没有追问。<br>在文档里选中一段文字试试。</div></div>
+    <button id="btn-locate" title="定位到最新提问" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <div id="composer">
+      <div id="anchor-chip" hidden><span class="chip-text"></span><button class="chip-x">×</button></div>
+      <div id="shot-chip" hidden><img alt="截图"><button class="chip-x">×</button></div>
+      <textarea id="q" rows="2" placeholder="选中文字后点「发送」提问，留空也行"></textarea>
+      <div class="composer-foot">
+        <div class="effort" title="思考强度：轻=快，深度=更缜密但更慢">
+          <input id="effort" type="range" min="0" max="2" step="1" aria-label="思考强度">
+          <span id="effort-label">标准</span>
+        </div>
+        <span id="status"></span>
+        <button id="btn-send" title="发送（回车）"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div id="float-menu" hidden></div>
+
+<div id="treeview" class="modal" hidden>
+  <div class="tv-card">
+    <header class="tv-head">
+      <span>追问树 · 结构图</span>
+      <span class="tv-hint">滚轮缩放 · 拖动平移 · 点节点定位</span>
+      <button id="tv-close" class="icon" title="关闭（Esc）">×</button>
+    </header>
+    <div id="tv-canvas"><svg id="tv-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  </div>
+</div>
+
+<div id="settings" class="modal" hidden>
+  <div class="modal-card">
+    <h3>模型设置</h3>
+    <label>Base URL<input id="cfg-base" placeholder="https://api.deepseek.com/v1"></label>
+    <label>API Key<input id="cfg-key" placeholder="留空则不修改" autocomplete="off"></label>
+    <label>对话模型<input id="cfg-model" placeholder="deepseek-flash"></label>
+    <label>视觉模型（截图提问用）<input id="cfg-vision" placeholder="留空则用对话模型"></label>
+    <div class="modal-actions">
+      <button id="cfg-cancel" class="ghost">取消</button>
+      <button id="cfg-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="./vendor/katex/katex.min.js"></script>
+<script type="module" src="./app.js"></script>
+<div id="theme-pop" class="theme-pop" hidden>
+  <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
+  <div class="tp-seg" id="tp-mode">
+    <button type="button" data-mode="dark">深色</button>
+    <button type="button" data-mode="light">浅色</button>
+  </div>
+  <div class="tp-row">
+    <span class="tp-lab">主色</span>
+    <input type="color" id="tp-color" value="#6d8dff">
+    <code id="tp-hex">#6d8dff</code>
+  </div>
+  <div class="tp-swatches" id="tp-presets">
+    <button type="button" data-color="#6d8dff" style="--sw:#6d8dff" title="墨蓝"></button>
+    <button type="button" data-color="#34d399" style="--sw:#34d399" title="森林"></button>
+    <button type="button" data-color="#f472b6" style="--sw:#f472b6" title="玫瑰"></button>
+    <button type="button" data-color="#f59e0b" style="--sw:#f59e0b" title="琥珀"></button>
+    <button type="button" data-color="#94a3b8" style="--sw:#94a3b8" title="石墨"></button>
+    <button type="button" data-color="#ef4444" style="--sw:#ef4444" title="绯红"></button>
+  </div>
+  <label class="tp-check"><input type="checkbox" id="tp-grad"> 背景渐变</label>
+  <div class="tp-row tp-range" id="tp-angle-row">
+    <span class="tp-lab">角度</span>
+    <input type="range" id="tp-angle" min="0" max="360" step="5" value="135">
+    <span id="tp-angle-v" class="tp-val">135°</span>
+  </div>
+  <div class="tp-row tp-range">
+    <span class="tp-lab">不透明</span>
+    <input type="range" id="tp-alpha" min="60" max="100" step="2" value="100">
+    <span id="tp-alpha-v" class="tp-val">100%</span>
+  </div>
+  <button id="tp-reset" class="tp-reset" type="button">恢复默认</button>
+</div>
+</body>
+</html>
