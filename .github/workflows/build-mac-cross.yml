@@ -1,0 +1,66 @@
+name: build-mac-cross
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: "arm64 = Apple Silicon，x64 = Intel"
+        required: true
+        default: arm64
+        type: choice
+        options: [arm64, x64]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ARCH: ${{ inputs.arch }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: install deps
+        run: npm install --no-audit --no-fund
+
+      - name: cross-build .app
+        run: |
+          npx --yes @electron/packager@18 . DocTree \
+            --platform=darwin \
+            --arch="$ARCH" \
+            --out=release-mac \
+            --overwrite \
+            --asar=false \
+            --prune=true \
+            --ignore='^/release' \
+            --ignore='^/mobile' \
+            --ignore='^/docs'
+
+      - name: add first-run script
+        run: |
+          cd release-mac
+          cat > 首次打开.command <<'EOF'
+          #!/bin/bash
+          # 未签名/未公证，首次双击会自动去隔离并做本地临时签名
+          cd "$(dirname "$0")"
+          APP="$(ls -d DocTree-darwin-*/DocTree.app | head -1)"
+          echo "正在处理: $APP"
+          xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+          codesign --force --deep --sign - "$APP" || true
+          open "$APP"
+          EOF
+          chmod +x 首次打开.command
+
+      - name: zip (preserve symlinks)
+        run: |
+          cd release-mac
+          zip -ry "DocTree-mac-$ARCH.zip" DocTree-darwin-$ARCH 首次打开.command
+          ls -lh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DocTree-mac-${{ inputs.arch }}
+          path: release-mac/DocTree-mac-${{ inputs.arch }}.zip
+          retention-days: 14
