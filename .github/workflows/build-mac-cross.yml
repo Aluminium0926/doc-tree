@@ -10,6 +10,9 @@ on:
         type: choice
         options: [arm64, x64]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,12 +41,19 @@ jobs:
             --ignore='^/mobile' \
             --ignore='^/docs'
 
+      - name: verify bundle (symlinks, size)
+        run: |
+          APP="release-mac/DocTree-darwin-$ARCH/DocTree.app"
+          echo "symlinks: $(find "$APP" -type l | wc -l)"
+          echo "size: $(du -sh "$APP" | cut -f1)"
+          find "$APP" -type l | head -5
+
       - name: add first-run script
         run: |
           cd release-mac
           cat > 首次打开.command <<'EOF'
           #!/bin/bash
-          # 未签名/未公证，首次双击会自动去隔离并做本地临时签名
+          # 未签名/未公证：首次双击会自动去隔离并做本地临时签名
           cd "$(dirname "$0")"
           APP="$(ls -d DocTree-darwin-*/DocTree.app | head -1)"
           echo "正在处理: $APP"
@@ -59,8 +69,22 @@ jobs:
           zip -ry "DocTree-mac-$ARCH.zip" DocTree-darwin-$ARCH 首次打开.command
           ls -lh
 
-      - uses: actions/upload-artifact@v4
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: DocTree-mac-${{ inputs.arch }}
           path: release-mac/DocTree-mac-${{ inputs.arch }}.zip
           retention-days: 14
+
+      - name: publish release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="mac-$ARCH-v1.0.0"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "release-mac/DocTree-mac-$ARCH.zip" --clobber
+          else
+            gh release create "$TAG" "release-mac/DocTree-mac-$ARCH.zip" \
+              --title "DocTree macOS $ARCH v1.0.0" \
+              --notes "macOS 版（$ARCH），在 Ubuntu 上交叉构建，未签名未公证。解压后双击「首次打开.command」，它会自动去隔离、做本地临时签名并启动。"
+          fi
