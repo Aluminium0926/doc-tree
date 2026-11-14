@@ -1,12 +1,16 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>文档树 · DocTree</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/style.css?v=35">
+<meta name="theme-color" content="#0a0c11">
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/style.css?v=47">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
+<link id="hljs-theme" rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
+<script src="/vendor/highlight/highlight.min.js" defer></script>
 </head>
 <body>
 <div id="app">
@@ -39,18 +43,19 @@
       </div>
       <div class="tb-actions">
         <div class="zoom-group">
-          <button id="btn-zoom-out" class="icon" title="缩小">−</button>
+          <button id="btn-zoom-out" class="icon" title="缩小"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button>
           <span id="zoom-label">100%</span>
-          <button id="btn-zoom-in" class="icon" title="放大">＋</button>
+          <button id="btn-zoom-in" class="icon" title="放大"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
         </div>
         <div class="page-nav" id="page-nav" hidden>
-          <button id="btn-prev" class="icon" title="上一页（←）">‹</button>
+          <button id="btn-prev" class="icon" title="上一页（←）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
           <input id="page-input" value="1" inputmode="numeric" aria-label="页码">
           <span class="page-total">/ <span id="page-total">0</span></span>
-          <button id="btn-next" class="icon" title="下一页（→）">›</button>
+          <button id="btn-next" class="icon" title="下一页（→）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
         </div>
-        <button id="btn-search" class="icon" title="搜索文档（Ctrl+F）">⌕</button>
-        <button id="btn-rotate" class="icon" title="顺时针旋转 90°">⟳</button>
+        <button id="btn-search" class="icon" title="搜索文档（Ctrl+F）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg></button>
+        <button id="btn-rotate" class="icon" title="顺时针旋转 90°"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button>
+        <button id="btn-theme" class="icon" title="页面配色"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg></button>
         <div class="tool-group">
           <button id="btn-hl" class="tool" title="荧光笔：开启后选中文字即高亮">荧光笔</button>
           <button id="btn-eraser" class="tool" title="擦除：点一下高亮即可删除">擦除</button>
@@ -81,11 +86,12 @@
     <header class="sb-head">
       <span>追问树 <em id="node-count"></em></span>
       <div class="sb-actions">
-        <button id="btn-treeview" class="icon" title="树状图">⌗</button>
-        <button id="btn-export" class="icon" title="导出 Markdown">⭳</button>
+        <button id="btn-treeview" class="icon" title="树状图"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="6" rx="1.5"/><rect x="14" y="15" width="7" height="6" rx="1.5"/><path d="M6.5 9v6.5a2 2 0 0 0 2 2H14"/></svg></button>
+        <button id="btn-export" class="icon" title="导出 Markdown"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg></button>
       </div>
     </header>
     <div id="tree"><div class="tree-empty">还没有追问。<br>在文档里选中一段文字试试。</div></div>
+    <button id="btn-locate" title="定位到最新提问" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
     <div id="composer">
       <div id="anchor-chip" hidden><span class="chip-text"></span><button class="chip-x">×</button></div>
       <div id="shot-chip" hidden><img alt="截图"><button class="chip-x">×</button></div>
@@ -96,7 +102,7 @@
           <span id="effort-label">标准</span>
         </div>
         <span id="status"></span>
-        <button id="btn-send">发送 ⏎</button>
+        <button id="btn-send" title="发送（回车）"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
       </div>
     </div>
   </aside>
@@ -130,6 +136,38 @@
 </div>
 
 <script src="/vendor/katex/katex.min.js"></script>
-<script type="module" src="/app.js?v=35"></script>
+<script type="module" src="/app.js?v=47"></script>
+<div id="theme-pop" class="theme-pop" hidden>
+  <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
+  <div class="tp-seg" id="tp-mode">
+    <button type="button" data-mode="dark">深色</button>
+    <button type="button" data-mode="light">浅色</button>
+  </div>
+  <div class="tp-row">
+    <span class="tp-lab">主色</span>
+    <input type="color" id="tp-color" value="#6d8dff">
+    <code id="tp-hex">#6d8dff</code>
+  </div>
+  <div class="tp-swatches" id="tp-presets">
+    <button type="button" data-color="#6d8dff" style="--sw:#6d8dff" title="墨蓝"></button>
+    <button type="button" data-color="#34d399" style="--sw:#34d399" title="森林"></button>
+    <button type="button" data-color="#f472b6" style="--sw:#f472b6" title="玫瑰"></button>
+    <button type="button" data-color="#f59e0b" style="--sw:#f59e0b" title="琥珀"></button>
+    <button type="button" data-color="#94a3b8" style="--sw:#94a3b8" title="石墨"></button>
+    <button type="button" data-color="#ef4444" style="--sw:#ef4444" title="绯红"></button>
+  </div>
+  <label class="tp-check"><input type="checkbox" id="tp-grad"> 背景渐变</label>
+  <div class="tp-row tp-range" id="tp-angle-row">
+    <span class="tp-lab">角度</span>
+    <input type="range" id="tp-angle" min="0" max="360" step="5" value="135">
+    <span id="tp-angle-v" class="tp-val">135°</span>
+  </div>
+  <div class="tp-row tp-range">
+    <span class="tp-lab">不透明</span>
+    <input type="range" id="tp-alpha" min="60" max="100" step="2" value="100">
+    <span id="tp-alpha-v" class="tp-val">100%</span>
+  </div>
+  <button id="tp-reset" class="tp-reset" type="button">恢复默认</button>
+</div>
 </body>
 </html>

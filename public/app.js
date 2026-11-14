@@ -1,4 +1,4 @@
-import { marked } from './vendor/marked.esm.js'
+﻿import { marked } from './vendor/marked.esm.js'
 marked.setOptions({ gfm: true, breaks: true })
 
 // 静态资源基址：兼容「根路径」和「子路径部署」（如 GitHub Pages /doc-tree/）
@@ -14,8 +14,107 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v35'
+const UI_VERSION = 'v47'
 console.log('[DocTree] UI', UI_VERSION)
+
+let hljsPromise = null
+function ensureHljs() {
+  if (window.hljs) return Promise.resolve(window.hljs)
+  hljsPromise ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = `${VENDOR}highlight/highlight.min.js`
+    s.onload = () => resolve(window.hljs)
+    s.onerror = () => reject(new Error('highlight.js 加载失败'))
+    document.head.appendChild(s)
+  })
+  return hljsPromise
+}
+
+const EXT_BY_LANG = {
+  python: 'py', py: 'py', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
+  bash: 'sh', shell: 'sh', sh: 'sh', zsh: 'sh', json: 'json', html: 'html', xml: 'xml',
+  css: 'css', sql: 'sql', java: 'java', kotlin: 'kt', c: 'c', cpp: 'cpp', 'c++': 'cpp',
+  csharp: 'cs', 'c#': 'cs', go: 'go', rust: 'rs', ruby: 'rb', php: 'php', swift: 'swift',
+  yaml: 'yml', yml: 'yml', markdown: 'md', md: 'md', diff: 'diff', plaintext: 'txt', text: 'txt'
+}
+
+// 把 <pre><code> 变成带语言标签、复制/下载按钮的代码卡片（对齐 DeepSeek 的样式）
+function enhanceCodeBlocks(root) {
+  if (!root) return
+  const pres = [...root.querySelectorAll('pre')].filter((p) => !p.closest('.code-card') && p.querySelector('code'))
+  if (!pres.length) return
+  const codes = []
+  for (const pre of pres) {
+    const code = pre.querySelector('code')
+    const lang = (code.className.match(/(?:language|lang)-([\w+#.-]+)/) || [])[1] || ''
+    const card = document.createElement('div')
+    card.className = 'code-card'
+    const head = document.createElement('div')
+    head.className = 'code-head'
+    const label = document.createElement('span')
+    label.className = 'code-lang'
+    label.textContent = lang || 'text'
+    const actions = document.createElement('div')
+    actions.className = 'code-actions'
+
+        const ICON_COPY = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 14.5V6A2.5 2.5 0 0 1 8 3.5h8.5"/></svg>'
+    const ICON_DOWN = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="m8 10.5 4 4 4-4"/><path d="M4.5 19.5h15"/></svg>'
+    const copyBtn = document.createElement('button')
+    copyBtn.type = 'button'
+    copyBtn.className = 'code-btn'
+    copyBtn.innerHTML = ICON_COPY + '<span>复制</span>'
+    copyBtn.addEventListener('click', async () => {
+      const text = code.innerText
+      try {
+        await navigator.clipboard.writeText(text)
+      } catch {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        try {
+          document.execCommand('copy')
+        } catch {}
+        ta.remove()
+      }
+      copyBtn.querySelector('span').textContent = '已复制'
+      setTimeout(() => (copyBtn.querySelector('span').textContent = '复制'), 1200)
+    })
+
+    const dlBtn = document.createElement('button')
+    dlBtn.type = 'button'
+    dlBtn.className = 'code-btn'
+    dlBtn.innerHTML = ICON_DOWN + '<span>下载</span>'
+    dlBtn.addEventListener('click', () => {
+      const ext = EXT_BY_LANG[lang] || 'txt'
+      const blob = new Blob([code.innerText], { type: 'text/plain;charset=utf-8' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `code.${ext}`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+    })
+
+    actions.append(copyBtn, dlBtn)
+    head.append(label, actions)
+    pre.replaceWith(card)
+    card.append(head, pre)
+    codes.push(code)
+  }
+
+  const highlight = (h) => {
+    if (!h) return
+    for (const code of codes) {
+      try {
+        h.highlightElement(code)
+      } catch {}
+    }
+  }
+  if (window.hljs) highlight(window.hljs)
+  else ensureHljs().then(highlight).catch(() => {})
+}
 
 // 先抽出公式占位，Markdown 渲染完再交给 KaTeX，避免换行/<br> 把 $$ 块切碎
 function renderMarkdown(src) {
@@ -91,10 +190,72 @@ const renderTasks = new WeakMap()
 const DEFAULT_LEFT = 244
 const DEFAULT_RIGHT = 460
 
+/* ================= 页面配色 ================= */
+function initTheme() {
+  const pop = $('#theme-pop')
+  const btn = $('#btn-theme')
+  if (!pop || !btn || !window.DTTheme) return
+
+  let cur = window.DTTheme.load()
+  const colorEl = $('#tp-color')
+  const hexEl = $('#tp-hex')
+  const gradEl = $('#tp-grad')
+  const angleEl = $('#tp-angle')
+  const angleV = $('#tp-angle-v')
+  const alphaEl = $('#tp-alpha')
+  const alphaV = $('#tp-alpha-v')
+  const angleRow = $('#tp-angle-row')
+
+  const sync = () => {
+    colorEl.value = cur.color
+    hexEl.textContent = cur.color
+    gradEl.checked = Boolean(cur.gradient)
+    angleEl.value = cur.angle
+    angleV.textContent = cur.angle + '°'
+    alphaEl.value = cur.alpha
+    alphaV.textContent = cur.alpha + '%'
+    document.querySelectorAll('#tp-mode button').forEach((b) => b.classList.toggle('on', b.dataset.mode === cur.mode))
+    document
+      .querySelectorAll('#tp-presets button')
+      .forEach((b) => b.classList.toggle('on', b.dataset.color.toLowerCase() === String(cur.color).toLowerCase()))
+    angleRow.classList.toggle('tp-angle-off', !cur.gradient)
+    pop.querySelectorAll('input[type="range"]').forEach(paintRange)
+  }
+
+  const commit = (patch, persist = true) => {
+    cur = { ...cur, ...patch }
+    window.DTTheme.apply(cur)
+    if (persist) window.DTTheme.save(cur)
+    sync()
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    pop.hidden = !pop.hidden
+    if (!pop.hidden) sync()
+  })
+  $('#tp-close').addEventListener('click', () => (pop.hidden = true))
+  document.addEventListener('mousedown', (e) => {
+    if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) pop.hidden = true
+  })
+  colorEl.addEventListener('input', () => commit({ color: colorEl.value }))
+  document.querySelectorAll('#tp-mode button').forEach((b) => b.addEventListener('click', () => commit({ mode: b.dataset.mode })))
+  document.querySelectorAll('#tp-presets button').forEach((b) => b.addEventListener('click', () => commit({ color: b.dataset.color })))
+  gradEl.addEventListener('change', () => commit({ gradient: gradEl.checked }))
+  angleEl.addEventListener('input', () => commit({ angle: Number(angleEl.value) }))
+  alphaEl.addEventListener('input', () => commit({ alpha: Number(alphaEl.value) }))
+  $('#tp-reset').addEventListener('click', () => {
+    cur = window.DTTheme.reset()
+    sync()
+  })
+  sync()
+}
+
 init()
 
 async function init() {
   bind()
+  initTheme()
   applySavedWidths()
   setLeftCollapsed(localStorage.getItem('dt:left') === '1', false)
   await loadState()
@@ -148,6 +309,23 @@ function currentCols() {
     .map((v) => parseFloat(v))
 }
 
+// 滑杆填充比例（到头时填满，不留空）
+function paintRange(el) {
+  if (!el) return
+  const min = Number(el.min || 0)
+  const max = Number(el.max || 100)
+  const v = Number(el.value)
+  el.style.setProperty('--pct', ((v - min) / (max - min)) * 100 + '%')
+}
+
+// 追问树底部留白 = 输入框高度，保证最后一行（含操作按钮）不被悬浮卡片挡住
+function syncTreeGap() {
+  const c = $('#composer')
+  const t = $('#tree')
+  if (!c || !t) return
+  t.style.paddingBottom = `${Math.round(c.offsetHeight + 28)}px`
+}
+
 function bindResizers() {
   const rightStrips = [$('#resizer-in')].filter(Boolean)
   const syncComposerGap = () => {
@@ -155,6 +333,7 @@ function bindResizers() {
     if (!c) return
     const gap = Math.round(c.offsetHeight + 10) + 'px'
     for (const rz of rightStrips) rz.style.bottom = gap
+    syncTreeGap()
   }
   syncComposerGap()
   if (window.ResizeObserver && $('#composer')) {
@@ -307,6 +486,7 @@ async function loadState() {
   const i = Math.max(0, EFFORT_IDS.indexOf(S.cfg.effort))
   $('#effort').value = i
   $('#effort-label').textContent = EFFORT_LABELS[i]
+  paintRange($('#effort'))
 }
 
 /* ================= 左侧文档库 ================= */
@@ -633,6 +813,7 @@ function renderTextDoc() {
   sheet.style.zoom = S.zoom
   if (S.doc.kind === 'md') {
     sheet.innerHTML = renderMarkdown(text)
+    enhanceCodeBlocks(sheet)
   } else {
     sheet.innerHTML = text
       .split(/\n{2,}/)
@@ -757,6 +938,8 @@ function hideFloat() {
 function renderTree() {
   const nodes = Object.values(S.tree.nodes || {})
   $('#node-count').textContent = nodes.length ? `(${nodes.length})` : ''
+  const locate = $('#btn-locate')
+  if (locate) locate.hidden = !nodes.length
   const root = $('#tree')
   root.innerHTML = ''
   if (!nodes.length) {
@@ -776,6 +959,7 @@ function renderTree() {
     for (const n of arr) root.appendChild(nodeEl(n, depth, kids))
   }
   build('root', 0)
+  syncTreeGap()
 }
 
 function nodeEl(n, depth, kids) {
@@ -826,6 +1010,7 @@ function nodeEl(n, depth, kids) {
   const ans = document.createElement('div')
   ans.className = 'answer markdown' + (n.status === 'streaming' ? ' streaming' : '')
   ans.innerHTML = renderMarkdown(n.answer || '')
+  enhanceCodeBlocks(ans)
   card.appendChild(ans)
 
   const acts = document.createElement('div')
@@ -1514,7 +1699,7 @@ function renderTreeGraph() {
     const path = document.createElementNS(SVGNS, 'path')
     path.setAttribute('d', `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`)
     path.setAttribute('fill', 'none')
-    path.setAttribute('stroke', '#3b4a66')
+    path.style.stroke = 'var(--line-2)'
     path.setAttribute('stroke-width', '1.6')
     g.appendChild(path)
   }
@@ -1530,8 +1715,8 @@ function renderTreeGraph() {
     rect.setAttribute('width', NODE_W)
     rect.setAttribute('height', NODE_H)
     rect.setAttribute('rx', '10')
-    rect.setAttribute('fill', '#171d27')
-    rect.setAttribute('stroke', n.anchor?.kind === 'answer' ? '#4b3f6b' : '#2c374a')
+    rect.style.fill = 'var(--panel-3)'
+    rect.style.stroke = n.anchor?.kind === 'answer' ? 'var(--accent-line)' : 'var(--line-2)'
     grp.appendChild(rect)
 
     const fo = document.createElementNS(SVGNS, 'foreignObject')
@@ -1633,8 +1818,23 @@ function bind() {
 
   $('#btn-send').addEventListener('click', () => send())
 
+  const locateBtn = $('#btn-locate')
+  if (locateBtn) {
+    locateBtn.addEventListener('click', () => {
+      const items = document.querySelectorAll('#tree .node')
+      const el = items[items.length - 1]
+      if (!el) return
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      el.classList.remove('flash')
+      void el.offsetWidth
+      el.classList.add('flash')
+      setTimeout(() => el.classList.remove('flash'), 1100)
+    })
+  }
+
   $('#effort').addEventListener('input', () => {
     $('#effort-label').textContent = EFFORT_LABELS[Number($('#effort').value)]
+    paintRange($('#effort'))
   })
   $('#effort').addEventListener('change', async () => {
     const i = Number($('#effort').value)

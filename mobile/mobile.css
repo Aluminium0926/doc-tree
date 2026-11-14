@@ -1,4 +1,4 @@
-/* 移动端适配：竖屏下文档区在上、追问树在下，文档库改为抽屉 */
+﻿/* 移动端适配：竖屏下文档区在上、追问树在下，文档库改为抽屉 */
 #btn-mobile-lib, #lib-backdrop { display: none; }
 
 @media (max-width: 900px) {
@@ -45,7 +45,7 @@
     height: 40px;
     place-items: center;
     border-radius: 12px;
-    background: rgba(18, 23, 32, 0.92);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
     border: 1px solid var(--line);
     color: var(--text);
     font-size: 17px;
@@ -67,7 +67,9 @@
   .page-nav input { width: 42px; }
 
   /* 输入区更紧凑，方便软键盘 */
-  #composer { padding: 10px 12px 12px; }
+  #composer { left: 10px; right: 10px; bottom: 10px; padding: 10px 12px 12px; }
+  #tree { padding: 12px 16px; }
+  #sidebar::after { height: 10px; }
   #q { min-height: 48px; }
   .tree-node .answer { font-size: 14px; }
   .float-menu button { padding: 10px 14px; }

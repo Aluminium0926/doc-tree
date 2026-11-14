@@ -1,4 +1,4 @@
-﻿// 移动端文档解析：PDF(pdf.js) / DOCX(mammoth) / 文本
+// 移动端文档解析：PDF(pdf.js) / DOCX(mammoth) / 文本
 const VENDOR = new URL('../vendor/', import.meta.url).href
 let pdfjsPromise = null
 
@@ -81,5 +81,6 @@ export async function extract(buf, ext) {
   if (e === '.pdf') return extractPdf(buf)
   if (e === '.docx') return extractDocx(buf)
   const text = normalize(decodeText(buf))
+  if (e === '.md' || e === '.markdown' || e === '.mdown') return { kind: 'md', pages: [{ no: 1, text }] }
   return { kind: 'text', pages: [{ no: 1, text }] }
 }

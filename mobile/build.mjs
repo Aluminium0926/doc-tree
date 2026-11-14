@@ -29,6 +29,7 @@ const copy = (from, to) => {
   else copyFile(from, to)
 }
 copy(path.join(root, 'public', 'app.js'), path.join(out, 'app.js'))
+copy(path.join(root, 'public', 'theme.js'), path.join(out, 'theme.js'))
 copy(path.join(root, 'public', 'style.css'), path.join(out, 'style.css'))
 copy(path.join(root, 'public', 'vendor'), path.join(out, 'vendor'))
 copy(path.join(here, 'src'), path.join(out, 'src'))
@@ -47,6 +48,7 @@ fs.writeFileSync(path.join(out, 'app.js'), appJs, 'utf8')
 let html = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8')
 html = html.replace(/href="\/style\.css\?v=\d+"/, 'href="./style.css"')
 html = html.replace(/"\/vendor\//g, '"./vendor/')
+html = html.replace('src="/theme.js"', 'src="./theme.js"')
 html = html.replace(
   /<link rel="stylesheet" href="\.\/style\.css">/,
   '<link rel="stylesheet" href="./style.css">\n<link rel="stylesheet" href="./mobile.css">\n<link rel="manifest" href="./manifest.webmanifest">\n<meta name="theme-color" content="#0a0c11">\n<script type="module" src="./src/bootstrap.js"></script>'
