@@ -76,6 +76,8 @@
 | 产物 | Release |
 |---|---|
 | `DocTree-android.apk` | [android-v1.0.2](https://github.com/Aluminium0926/doc-tree/releases/tag/android-v1.0.2) |
+| `DocTree-mac-arm64.zip`（Apple Silicon） | [mac-arm64-v1.0.0](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.0) |
+| `DocTree-mac-x64.zip`（Intel Mac） | [mac-x64-v1.0.0](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.0) |
 | `DocTree-web-v1.0.0.zip`（静态包，自建托管用） | [web-v1.0.0](https://github.com/Aluminium0926/doc-tree/releases/tag/web-v1.0.0) |
 | `DocTree-1.0.3-win32-x64.zip`（Windows 便携版） | [v1.0.3](https://github.com/Aluminium0926/doc-tree/releases/tag/v1.0.3) |
 
@@ -153,23 +155,34 @@ npm run dist    # 用 electron-packager 打包到 release/
 
 三种方式，按省事程度排：
 
-1. **网页版**：Safari / Chrome 打开 https://aluminium0926.github.io/doc-tree/ ，Chrome 可「安装应用」，Safari 17+ 可「添加到程序坞」。
-2. **源码运行**：`npm install && npm start`（Node），或 `npm run app` 直接开 Electron 窗口。
-3. **原生 `.app`**：在 Mac 上执行
+1. **现成安装包**（推荐）
+   - Apple Silicon：[mac-arm64-v1.0.0](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.0) → `DocTree-mac-arm64.zip`
+   - Intel：[mac-x64-v1.0.0](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.0) → `DocTree-mac-x64.zip`
+
+   解压后**双击「首次打开.command」**：它会自动去掉隔离标记、做本地临时签名，然后启动。
+
+   也可以手动：
 
    ```bash
-   bash scripts/build-macos.sh arm64    # Apple Silicon；Intel 用 x64
+   xattr -dr com.apple.quarantine DocTree-darwin-arm64/DocTree.app
+   codesign --force --deep --sign - DocTree-darwin-arm64/DocTree.app
+   open DocTree-darwin-arm64/DocTree.app
    ```
 
-   产物在 `release-mac/DocTree-mac-arm64.zip`。脚本会做本地临时签名；**没有 Apple 公证**，首次打开若被 Gatekeeper 拦，右键「打开」或执行：
+2. **网页版**：Safari / Chrome 打开 https://aluminium0926.github.io/doc-tree/ ，Chrome 可「安装应用」，Safari 17+ 可「添加到程序坞」。
+3. **自己构建**：
 
    ```bash
-   xattr -dr com.apple.quarantine "release-mac/DocTree-darwin-arm64/DocTree.app"
+   bash scripts/build-macos.sh arm64    # 在 Mac 上；Intel 用 x64
    ```
+
+   或者用 GitHub Actions 的 Linux runner 交叉构建：`.github/workflows/build-mac-cross.yml`（workflow_dispatch，可选架构，产物直接发到 Release）。
 
 macOS 上窗口菜单已补 App 菜单与「编辑」菜单（Cmd+C / Cmd+V / Cmd+Z 可用），数据目录在 `~/Library/Application Support/文档树`。
 
-> 为什么没有现成的 mac 安装包：Electron 的 `.app` 依赖框架符号链接与可执行权限，必须在 macOS 上打包；这台开发机是 Windows，且 GitHub Actions 的 macOS runner 在当前账号上不可用（实测任务被系统直接取消）。所以提供构建脚本，在任意一台 Mac 上 3 分钟即可出包。
+> **关于签名**：包是**未签名、未公证**的，所以才有「首次打开.command」这一步。它用 `codesign -` 做 ad-hoc 签名（Apple Silicon 上必需），并清掉下载隔离属性。想要双击即开、无任何提示，需要 Apple 开发者证书 + 公证，这一步只能在有证书的 Mac 上完成。
+>
+> **构建方式**：`.app` 里 Electron 框架有 14 个符号链接，Windows 上打包会丢。这里在 GitHub Actions 的 **Ubuntu** runner 上交叉构建，用 `zip -ry` 保留符号链接，构建日志里会打印 `symlinks: 14` 核对。
 
 ## 目录结构
 
