@@ -14,7 +14,7 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v70'
+const UI_VERSION = 'v71'
 const APP_VERSION = '1.0.6'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
@@ -1389,7 +1389,12 @@ function locate(anchor) {
 async function send(forced) {
   if (!S.doc) return toast('先打开一份文档')
   if (S.busy) return
-  const anchor = S.pendingAnchor
+  let anchor = S.pendingAnchor
+  if (!anchor && S.doc) {
+    // 没选文字：锚定到当前正在看的那一页，而不是第 1 页
+    anchor = { kind: 'doc', page: S.doc.kind === 'pdf' ? currentPage() : 1, quote: '' }
+    S.pendingAnchor = anchor
+  }
   let q = (forced ?? $('#q').value).trim()
   if (!q) {
     if (!anchor) return toast('先选中文字，或输入一个问题')
