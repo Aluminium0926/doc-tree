@@ -2,8 +2,8 @@
 import * as db from './db.js'
 import { extract } from './extract.js'
 import { publicConfig, readConfig, writeConfig } from './config.js'
-import { chat, streamChat } from './llm.js'
-import { buildAskMessages, buildSummaryMessages, treeToMarkdown } from './context.mjs'
+import { chat, streamChat, streamChatWithTools } from './llm.js'
+import { buildAskMessages, buildSummaryMessages, treeToMarkdown, TOOL_SPECS, execTool } from './context.mjs'
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {
@@ -121,7 +121,7 @@ async function handleAsk(init) {
     send({ type: 'meta', node })
     try {
       const messages = buildAskMessages({ docs, tree, node, image: body.image })
-      await streamChat(
+      await streamChatWithTools(
         messages,
         (d) => {
           node.answer += d
@@ -130,6 +130,8 @@ async function handleAsk(init) {
         {
           model: useModel,
           provider,
+          specs: TOOL_SPECS,
+          exec: (name, args) => execTool(docs, doc.id, name, args),
           onReasoning: (t) => {
             node.reasoning = (node.reasoning || '') + t
             send({ type: 'reasoning', text: t })

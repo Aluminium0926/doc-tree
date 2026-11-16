@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { extract, kindOf } from './lib/extract.mjs'
 import * as store from './lib/store.mjs'
 import * as llm from './lib/llm.mjs'
-import { buildAskMessages, buildSummaryMessages, treeToMarkdown } from './lib/context.mjs'
+import { buildAskMessages, buildSummaryMessages, treeToMarkdown, execTool } from './lib/context.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SERVER_VERSION = (() => {
@@ -353,7 +353,7 @@ async function handleAsk(req, res) {
 
   try {
     const messages = buildAskMessages({ docs, tree, node, image: body.image })
-    await llm.streamChat(
+    await llm.streamChatWithTools(
       messages,
       (d) => {
         node.answer += d
@@ -363,6 +363,7 @@ async function handleAsk(req, res) {
         signal: ac.signal,
         model: useModel,
         provider,
+        exec: (name, args) => execTool(docs, doc.id, name, args),
         onReasoning: (t) => {
           node.reasoning = (node.reasoning || '') + t
           sse({ type: 'reasoning', text: t })
