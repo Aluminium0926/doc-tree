@@ -1,4 +1,4 @@
-// 文档树 · 本地服务
+﻿// 文档树 · 本地服务
 import http from 'node:http'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
@@ -87,10 +87,13 @@ async function handleApi(req, res, url) {
   if (p === '/api/config' && req.method === 'POST') {
     const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
     const patch = {}
-    for (const k of ['baseUrl', 'model', 'visionModel']) {
+    for (const k of ['baseUrl', 'model', 'visionModel', 'visionBaseUrl', 'apiFormat', 'visionFormat']) {
       if (typeof body[k] === 'string' && body[k].trim()) patch[k] = body[k].trim()
     }
     if (typeof body.apiKey === 'string' && body.apiKey.trim()) patch.apiKey = body.apiKey.trim()
+    if (typeof body.visionApiKey === 'string' && body.visionApiKey.trim()) patch.visionApiKey = body.visionApiKey.trim()
+    if (body.visionApiKey === '') patch.visionApiKey = ''
+    if (body.visionBaseUrl === '') patch.visionBaseUrl = ''
     if (['low', 'high', 'max'].includes(body.effort)) patch.effort = body.effort
     llm.writeConfig(patch)
     return json(res, 200, { config: llm.publicConfig() })
@@ -100,6 +103,33 @@ async function handleApi(req, res, url) {
     const name = decodeURIComponent(req.headers['x-filename'] || 'document')
     const buf = await readBody(req)
     const ext = path.extname(name).toLowerCase()
+    const hash = crypto.createHash('sha256').update(buf).digest('hex')
+
+    // 同一份文件再次导入（可能之前被移出列表）→ 复用原文档，提问树与上下文都还在
+    let revived = null
+    for (const meta of await store.listDocs()) {
+      const old = await store.getDoc(meta.id)
+      if (!old) continue
+      // 老数据没有 hash：按实际文件补算一次，保证同一文件能被认出来
+      if (!old.hash) {
+        try {
+          const fb = await fsp.readFile(store.filePath(old.id, old.ext))
+          old.hash = crypto.createHash('sha256').update(fb).digest('hex')
+          await store.saveDoc(old)
+        } catch {}
+      }
+      if (old.hash !== hash) continue
+      old.hidden = false
+      old.updatedAt = Date.now()
+      old.filename = name
+      await store.saveDoc(old)
+      revived = old
+      break
+    }
+    if (revived) {
+      return json(res, 200, { doc: { id: revived.id, title: revived.title, kind: revived.kind, pages: revived.pages.length }, revived: true })
+    }
+
     const { kind, pages } = await extract(buf, ext)
     const id = crypto.randomBytes(6).toString('hex')
     await store.saveFile(id, ext, buf)
@@ -111,8 +141,11 @@ async function handleApi(req, res, url) {
       ext,
       pages,
       summary: '',
+      hash,
+      hidden: false,
       bytes: buf.length,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     }
     await store.saveDoc(doc)
 
@@ -142,9 +175,22 @@ async function handleApi(req, res, url) {
       return json(res, 200, { doc, tree })
     }
     if (m && req.method === 'DELETE') {
-      await store.deleteDoc(m[1])
-      return json(res, 200, { ok: true })
+      // 软删除：只从列表移除，保留文件与提问树
+      await store.setHidden(m[1], true)
+      return json(res, 200, { ok: true, hidden: true })
     }
+  }
+
+  if (p === '/api/doc/restore' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req) || '{}')
+    await store.setHidden(body.id, false)
+    return json(res, 200, { ok: true })
+  }
+
+  if (p === '/api/doc/purge' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req) || '{}')
+    await store.deleteDoc(body.id)
+    return json(res, 200, { ok: true })
   }
 
   {
@@ -237,7 +283,10 @@ async function handleAsk(req, res) {
 
   const tree = await store.getTree(body.docId)
   const id = crypto.randomBytes(6).toString('hex')
-  const useModel = body.image && cfg.visionModel ? cfg.visionModel : cfg.model
+  const useModel = body.image ? cfg.visionModel || cfg.model : cfg.model
+  const provider = body.image
+    ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat }
+    : null
   const node = {
     id,
     docId: body.docId,
@@ -275,6 +324,7 @@ async function handleAsk(req, res) {
       {
         signal: ac.signal,
         model: useModel,
+        provider,
         onReasoning: (t) => {
           node.reasoning = (node.reasoning || '') + t
           sse({ type: 'reasoning', text: t })

@@ -14,7 +14,10 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v47'
+const UI_VERSION = 'v61'
+const APP_VERSION = '1.0.5'
+const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
+const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
 
 let hljsPromise = null
@@ -251,10 +254,91 @@ function initTheme() {
   sync()
 }
 
-init()
 
+function verParts(v) {
+  return String(v || '').replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0)
+}
+
+function cmpVer(a, b) {
+  const A = verParts(a)
+  const B = verParts(b)
+  for (let i = 0; i < 3; i++) {
+    const d = (A[i] || 0) - (B[i] || 0)
+    if (d) return d
+  }
+  return 0
+}
+
+let latestTag = ''
+
+async function checkUpdate() {
+  try {
+    if (localStorage.getItem('dt:verCheckOff') === '1') return
+    const res = await fetch(RELEASES_API, { headers: { accept: 'application/vnd.github+json' } })
+    if (!res.ok) return
+    const list = await res.json()
+    localStorage.setItem('dt:verCheckAt', String(Date.now()))
+    const tags = list
+      .filter((r) => !r.draft && !r.prerelease)
+      .map((r) => r.tag_name)
+      .filter((x) => /^v\d+\.\d+\.\d+$/.test(x))
+    if (!tags.length) return
+    tags.sort(cmpVer)
+    const latest = tags[tags.length - 1]
+    if (cmpVer(latest, 'v' + APP_VERSION) <= 0) return
+    if (localStorage.getItem('dt:skipVersion') === latest) return
+    latestTag = latest
+    const el = $('#update-text')
+    if (el) {
+      el.innerHTML = `当前版本 ${UI_VERSION}（${APP_VERSION}），最新版本 <b>${latest}</b>。
+        官方版本永远免费，不需要向任何人付费购买。`
+    }
+    const u = $('#update')
+    if (u) u.hidden = false
+  } catch {}
+}
+
+function closeUpdate(go) {
+  const u = $('#update')
+  if (u) u.hidden = true
+  if ($('#update-skip')?.checked && latestTag) localStorage.setItem('dt:skipVersion', latestTag)
+  if (go) window.open(latestTag ? `${RELEASES_PAGE}/tag/${latestTag}` : RELEASES_PAGE, '_blank', 'noopener')
+}
+
+function initUpdateCheck() {
+  $('#update-later')?.addEventListener('click', () => closeUpdate(false))
+  $('#update-go')?.addEventListener('click', () => closeUpdate(true))
+  const w = $('#welcome')
+  if (!w || w.hidden) setTimeout(() => checkUpdate(), 2000)
+}
+
+function maybeWelcome() {
+  try {
+    if (localStorage.getItem('dt:seenWelcome') === '1') return
+  } catch {
+    return
+  }
+  const m = $('#welcome')
+  if (!m) return
+  m.hidden = false
+  const ver = $('#welcome-ver')
+  if (ver) ver.textContent = `当前版本 ${UI_VERSION} · ${APP_VERSION}`
+  const ok = $('#welcome-ok')
+  const close = () => {
+    m.hidden = true
+    try {
+      localStorage.setItem('dt:seenWelcome', '1')
+    } catch {}
+    setTimeout(() => checkUpdate(), 500)
+  }
+  ok.addEventListener('click', close, { once: true })
+  m.addEventListener('click', (e) => { if (e.target === m) close() }, { once: true })
+}
 async function init() {
   bind()
+  maybeWelcome()
+  initUpdateCheck()
+
   initTheme()
   applySavedWidths()
   setLeftCollapsed(localStorage.getItem('dt:left') === '1', false)
@@ -264,6 +348,8 @@ async function init() {
   const want = qs.get('doc') || localStorage.getItem('dt:last')
   if (want && S.docs.some((d) => d.id === want)) openDoc(want)
 }
+
+init()
 
 function setLeftCollapsed(v, persist = true) {
   const app = $('#app')
@@ -293,7 +379,7 @@ function applySavedWidths(fromCurrent = false) {
   const minViewer = 320
 
   // 先压缩右栏，保证文档区至少 320px
-  r = Math.min(r, Math.max(260, Math.min(900, W - (collapsed ? 58 : l) - minViewer)))
+  r = Math.min(r, Math.max(260, Math.min(900, W - (collapsed ? 0 : l) - minViewer)))
   r = Math.max(260, r)
   // 再压缩左栏
   l = Math.min(l, Math.max(180, Math.min(460, W - r - minViewer)))
@@ -489,34 +575,96 @@ async function loadState() {
   paintRange($('#effort'))
 }
 
+const NO_ASK_REMOVE = 'dt:noAskRemove'
+
+function confirmRemove(title) {
+  if (localStorage.getItem(NO_ASK_REMOVE) === '1') return Promise.resolve(true)
+  const m = $('#ask')
+  if (!m) return Promise.resolve(window.confirm(`把《${title}》移出列表？`))
+  $('#ask-text').textContent = `把《${title}》移出列表？\n提问树和对话会保留，下次导入同一份文件即可恢复。`
+  $('#ask-never').checked = false
+  m.hidden = false
+  return new Promise((resolve) => {
+    const done = (ok) => {
+      m.hidden = true
+      $('#ask-ok').removeEventListener('click', onOk)
+      $('#ask-cancel').removeEventListener('click', onCancel)
+      m.removeEventListener('click', onBackdrop)
+      document.removeEventListener('keydown', onKey)
+      if (ok && $('#ask-never').checked) localStorage.setItem(NO_ASK_REMOVE, '1')
+      resolve(ok)
+    }
+    const onOk = () => done(true)
+    const onCancel = () => done(false)
+    const onBackdrop = (e) => { if (e.target === m) done(false) }
+    const onKey = (e) => { if (e.key === 'Escape') done(false) }
+    $('#ask-ok').addEventListener('click', onOk)
+    $('#ask-cancel').addEventListener('click', onCancel)
+    m.addEventListener('click', onBackdrop)
+    document.addEventListener('keydown', onKey)
+  })
+}
 /* ================= 左侧文档库 ================= */
 function renderLibrary() {
   const box = $('#doc-list')
   box.innerHTML = ''
-  if (!S.docs.length) {
+  const visible = S.docs.filter((d) => !d.hidden)
+  const hidden = S.docs.filter((d) => d.hidden)
+  if (!visible.length && !hidden.length) {
     box.innerHTML = '<div class="tree-empty">还没有文档</div>'
     return
   }
-  for (const d of S.docs) {
+  for (const d of visible) {
     const el = document.createElement('div')
     el.className = 'doc-item' + (S.doc && S.doc.id === d.id ? ' active' : '')
     el.dataset.id = d.id
     el.innerHTML = `<span class="doc-ico" data-kind="${esc(d.kind)}">${esc((d.kind || '?').toUpperCase())}</span>
       <span class="t" title="${esc(d.title)}">${esc(d.title)}</span>
-      <button class="x" title="删除">✕</button>`
+      <button class="x" title="移出列表（保留提问树）">✕</button>`
     el.addEventListener('click', (e) => {
-      if (e.target.classList.contains('x')) return
+      if (e.target.closest('button')) return
       openDoc(d.id)
     })
     el.querySelector('.x').addEventListener('click', async (e) => {
       e.stopPropagation()
-      if (!confirm(`删除《${d.title}》及其追问树？`)) return
+      if (!(await confirmRemove(d.title))) return
       await fetch(`/api/doc/${d.id}`, { method: 'DELETE' })
       if (S.doc && S.doc.id === d.id) resetViewer()
       await loadState()
       renderLibrary()
+      toast('已移出列表，重新导入同一文件即可恢复')
     })
     box.appendChild(el)
+  }
+
+  if (hidden.length) {
+    const head = document.createElement('div')
+    head.className = 'doc-arch-head'
+    head.textContent = `已移除（${hidden.length}）`
+    box.appendChild(head)
+    for (const d of hidden) {
+      const el = document.createElement('div')
+      el.className = 'doc-item archived'
+      el.dataset.id = d.id
+      el.innerHTML = `<span class="doc-ico" data-kind="${esc(d.kind)}">${esc((d.kind || '?').toUpperCase())}</span>
+        <span class="t" title="${esc(d.title)}">${esc(d.title)}</span>
+        <button class="restore" title="恢复到列表">↩</button>
+        <button class="x" title="彻底删除（含提问树）">✕</button>`
+      el.querySelector('.restore').addEventListener('click', async (e) => {
+        e.stopPropagation()
+        await fetch('/api/doc/restore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: d.id }) })
+        await loadState()
+        renderLibrary()
+      })
+      el.querySelector('.x').addEventListener('click', async (e) => {
+        e.stopPropagation()
+        if (!confirm(`彻底删除《${d.title}》及其提问树？\n此操作不可恢复。`)) return
+        await fetch('/api/doc/purge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: d.id }) })
+        await loadState()
+        renderLibrary()
+      })
+      box.appendChild(el)
+    }
   }
 }
 
@@ -545,6 +693,9 @@ async function importFiles(files) {
 
 /* ================= 打开文档 ================= */
 function resetViewer() {
+  zoomPreviewZ = null
+  const _pv = document.getElementById('pages')
+  if (_pv) _pv.style.zoom = ''
   S.doc = null
   S.tree = { nodes: {} }
   S.pdf = null
@@ -1298,8 +1449,153 @@ function toast(msg) {
   toast._t = setTimeout(() => (t.hidden = true), 3800)
 }
 
-function updateZoomLabel() {
-  $('#zoom-label').textContent = Math.round(S.zoom * 100) + '%'
+function clampZoom(z) {
+  return Math.max(0.35, Math.min(3, z))
+}
+
+function updateZoomLabel(z = zoomPreviewZ ?? S.zoom) {
+  $('#zoom-label').textContent = Math.round(z * 100) + '%'
+}
+
+/* ---------- 无极缩放 ---------- */
+var zoomPreviewZ = null
+var zoomPreviewTimer = 0
+
+// 先把画面按目标比例预览（不动画布），停止操作后再按新比例重绘
+function previewZoom(target) {
+  if (!S.doc) return
+  const z = clampZoom(target)
+  zoomPreviewZ = z
+  updateZoomLabel(z)
+  if (S.doc.kind === 'pdf') {
+    const pages = $('#pages')
+    if (pages) pages.style.zoom = z / S.zoom
+  } else {
+    const sheet = $('#sheet')
+    if (sheet) sheet.style.zoom = z
+  }
+  clearTimeout(zoomPreviewTimer)
+  zoomPreviewTimer = setTimeout(commitZoom, 160)
+}
+
+function commitZoom() {
+  if (zoomPreviewZ == null) return
+  const z = zoomPreviewZ
+  zoomPreviewZ = null
+  const pages = $('#pages')
+  if (pages) pages.style.zoom = ''
+  setZoom(z)
+}
+
+
+/* ---------- 页面右键：讲解本页 ---------- */
+function bindPageMenu() {
+  const pages = $('#pages')
+  const menu = $('#page-menu')
+  if (!pages || !menu) return
+  let pageNo = 0
+  const hide = () => {
+    menu.hidden = true
+  }
+  const showAt = (x, y) => {
+    menu.hidden = false
+    const w = menu.offsetWidth || 110
+    const h = menu.offsetHeight || 32
+    menu.style.left = Math.min(x, window.innerWidth - w - 8) + 'px'
+    menu.style.top = Math.min(y, window.innerHeight - h - 8) + 'px'
+  }
+
+  pages.addEventListener('contextmenu', (e) => {
+    if (!S.doc || S.doc.kind !== 'pdf') return
+    const el = e.target.closest('.page')
+    if (!el) return
+    e.preventDefault()
+    pageNo = Number(el.dataset.page || 0)
+    showAt(e.clientX, e.clientY)
+  })
+
+  // 触屏长按
+  let lp = 0
+  pages.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length !== 1 || !S.doc || S.doc.kind !== 'pdf') return
+      const el = e.target.closest('.page')
+      if (!el) return
+      const touch = e.touches[0]
+      clearTimeout(lp)
+      lp = setTimeout(() => {
+        pageNo = Number(el.dataset.page || 0)
+        showAt(touch.clientX, touch.clientY)
+      }, 550)
+    },
+    { passive: true }
+  )
+  pages.addEventListener('touchmove', () => clearTimeout(lp), { passive: true })
+  pages.addEventListener('touchend', () => clearTimeout(lp), { passive: true })
+
+  $('#pm-explain')?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    hide()
+    if (!pageNo) return
+    hideFloat()
+    S.pendingParent = null
+    S.pendingShot = null
+    S.pendingAnchor = { kind: 'doc', page: pageNo, quote: '' }
+    send('讲解本页内容')
+  })
+
+  document.addEventListener('mousedown', (e) => {
+    if (!menu.hidden && !menu.contains(e.target)) hide()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide()
+  })
+  $('#page-scroll')?.addEventListener('scroll', hide, { passive: true })
+  window.addEventListener('resize', hide)
+}
+
+function bindWheelZoom() {
+  const sc = $('#page-scroll')
+  if (!sc) return
+  sc.addEventListener(
+    'wheel',
+    (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      if (!S.doc || S.doc.kind !== 'pdf') return
+      e.preventDefault()
+      const factor = Math.exp(-e.deltaY * 0.0007)
+      previewZoom((zoomPreviewZ ?? S.zoom) * factor)
+    },
+    { passive: false }
+  )
+
+  // 双指捏合
+  let pinch = null
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+  sc.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length === 2 && S.doc?.kind === 'pdf') pinch = { d: dist(e.touches), z: zoomPreviewZ ?? S.zoom }
+    },
+    { passive: true }
+  )
+  sc.addEventListener(
+    'touchmove',
+    (e) => {
+      if (!pinch || e.touches.length !== 2) return
+      e.preventDefault()
+      const k = dist(e.touches) / Math.max(1, pinch.d)
+      previewZoom(pinch.z * k)
+    },
+    { passive: false }
+  )
+  sc.addEventListener('touchend', () => {
+    pinch = null
+  })
+  sc.addEventListener('touchcancel', () => {
+    pinch = null
+  })
 }
 
 // 当前页：以视口顶部最近的页为准
@@ -1335,7 +1631,7 @@ function turnPage(dir) {
 }
 
 function setZoom(z) {
-  S.zoom = Math.max(0.5, Math.min(2.5, z))
+  S.zoom = clampZoom(z)
   localStorage.setItem('dt:zoom', S.zoom)
   updateZoomLabel()
   hideFloat()
@@ -1351,7 +1647,17 @@ function openSettings() {
   $('#cfg-base').value = S.cfg?.baseUrl || ''
   $('#cfg-model').value = S.cfg?.model || ''
   $('#cfg-vision').value = S.cfg?.visionModel || ''
+  $('#cfg-vision-base').value = S.cfg?.visionBaseUrl || ''
+  $('#cfg-vision-key').value = ''
+  $('#cfg-format').value = S.cfg?.apiFormat || 'auto'
+  $('#cfg-vision-format').value = S.cfg?.visionFormat || 'auto'
   $('#cfg-key').value = ''
+  const sver = $('#settings-ver')
+  if (sver) sver.textContent = `当前版本 ${UI_VERSION} · ${APP_VERSION}`
+  const upChk = $('#cfg-update-check')
+  if (upChk) upChk.checked = localStorage.getItem('dt:verCheckOff') !== '1'
+  const noAsk = $('#cfg-ask-remove')
+  if (noAsk) noAsk.checked = localStorage.getItem(NO_ASK_REMOVE) !== '1'
   $('#settings').hidden = false
 }
 
@@ -1360,8 +1666,13 @@ async function saveSettings() {
     baseUrl: $('#cfg-base').value.trim(),
     model: $('#cfg-model').value.trim(),
     visionModel: $('#cfg-vision').value.trim(),
+    visionBaseUrl: $('#cfg-vision-base').value.trim(),
+    apiFormat: $('#cfg-format').value,
+    visionFormat: $('#cfg-vision-format').value,
     apiKey: $('#cfg-key').value.trim()
   }
+  const vk = $('#cfg-vision-key').value.trim()
+  if (vk) body.visionApiKey = vk
   await fetch('/api/config', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1816,6 +2127,16 @@ function bind() {
     if (e.dataTransfer?.files?.length) importFiles(Array.from(e.dataTransfer.files))
   })
 
+  $('#cfg-update-check')?.addEventListener('change', (e) => {
+    if (e.target.checked) localStorage.removeItem('dt:verCheckOff')
+    else localStorage.setItem('dt:verCheckOff', '1')
+  })
+
+  $('#cfg-ask-remove')?.addEventListener('change', (e) => {
+    if (e.target.checked) localStorage.removeItem(NO_ASK_REMOVE)
+    else localStorage.setItem(NO_ASK_REMOVE, '1')
+  })
+
   $('#btn-send').addEventListener('click', () => send())
 
   const locateBtn = $('#btn-locate')
@@ -1880,8 +2201,32 @@ function bind() {
     )
   }
 
-  $('#btn-zoom-in').addEventListener('click', () => setZoom(S.zoom + 0.1))
-  $('#btn-zoom-out').addEventListener('click', () => setZoom(S.zoom - 0.1))
+  const zoomHold = (btn, dir) => {
+    if (!btn) return
+    let hold = 0
+    let rep = 0
+    const bump = () => previewZoom((zoomPreviewZ ?? S.zoom) + dir * 0.01)
+    const stop = () => {
+      clearTimeout(hold)
+      clearInterval(rep)
+      rep = 0
+    }
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      bump()
+      hold = setTimeout(() => {
+        rep = setInterval(bump, 60)
+      }, 320)
+    })
+    btn.addEventListener('pointerup', stop)
+    btn.addEventListener('pointerleave', stop)
+    btn.addEventListener('pointercancel', stop)
+  }
+  zoomHold($('#btn-zoom-in'), 1)
+  zoomHold($('#btn-zoom-out'), -1)
+  $('#zoom-label').addEventListener('dblclick', () => setZoom(1))
+  bindWheelZoom()
+  bindPageMenu()
   $('#btn-shot').addEventListener('click', () => toggleShot())
 
   // 工具条：页码 / 旋转 / 荧光笔 / 擦除
@@ -1972,8 +2317,9 @@ function bind() {
   })
 
   $('#btn-settings').addEventListener('click', openSettings)
-  $('#btn-collapse').addEventListener('click', () => setLeftCollapsed(true))
-  $('#btn-expand').addEventListener('click', () => setLeftCollapsed(false))
+  $('#btn-sidebar')?.addEventListener('click', () => setLeftCollapsed(!$('#app').classList.contains('collapsed')))
+  $('#btn-collapse')?.addEventListener('click', () => setLeftCollapsed(true))
+  $('#btn-expand')?.addEventListener('click', () => setLeftCollapsed(false))
   bindResizers()
   $('#cfg-cancel').addEventListener('click', () => ($('#settings').hidden = true))
   $('#cfg-save').addEventListener('click', saveSettings)

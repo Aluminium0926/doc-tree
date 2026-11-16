@@ -17,9 +17,9 @@
 |---|---|---|
 | **手机 / 平板浏览器** | 打开 **https://aluminium0926.github.io/doc-tree/** ，「添加到桌面」 | 零安装，数据存浏览器本地，可离线 |
 | **iOS** | Safari 打开同一网址 → 分享 → 添加到主屏幕 | 不需要 App Store，长按选中提问已适配 |
-| **安卓** | 下载 `android-v1.0.3` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
+| **安卓** | 下载 `android-v1.0.4` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
 | **鸿蒙 NEXT** | 用系统自带的**卓易通**安装同一个 APK；不装就用上面的网页版 | 卓易通提供安卓运行时，装完 APK 可当普通 App 用 |
-| **Windows** | 下载 `DocTree-1.0.4-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
+| **Windows** | 下载 `DocTree-1.0.5-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
 | **macOS** | 网页版开箱可用；原生 `.app` 用 `bash scripts/build-macos.sh` 在 Mac 上构建 | 未公证，首次需右键「打开」 |
 | 开发者 | `npm install && npm start` | 起本地服务端，`HOST=0.0.0.0` 可让局域网手机访问 |
 
@@ -61,6 +61,14 @@
 
 ## 最近更新
 
+- **v1.0.5（Windows / 安卓 / 网页 / macOS 同步）**
+  - 文件列表可清理：移出列表保留提问树，同一文件再次导入自动恢复
+  - 首次启动声明官方渠道 + 版本号；每次启动检查新版本，可在设置里静默
+  - 独立视觉端点 / Key，文本与视觉可用不同服务商
+  - 支持 Anthropic（Claude）原生接口，自动识别或手动选择
+  - 右键 / 长按 PDF 页面「讲解本页」
+  - 无极缩放：Ctrl+滚轮、触控板/手机双指捏合、按住按钮连续缩放
+  - 内联代码样式、页面菜单阴影等细节调整
 - **v1.0.4（Windows / 安卓 / 网页 / macOS 同步）**
   - 自定义页面配色：一个主色派生整套颜色，深色/浅色、背景渐变、透明度，实时预览
   - 代码块对齐 DeepSeek：语言标签、语法高亮、复制/下载，浅色下自动切浅色语法主题
@@ -84,11 +92,11 @@
 
 | 产物 | Release |
 |---|---|
-| `DocTree-android.apk` | [android-v1.0.3](https://github.com/Aluminium0926/doc-tree/releases/tag/android-v1.0.3) |
-| `DocTree-mac-arm64.zip`（Apple Silicon） | [mac-arm64-v1.0.1](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.1) |
-| `DocTree-mac-x64.zip`（Intel Mac） | [mac-x64-v1.0.1](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.1) |
-| `DocTree-web-v1.0.1.zip`（静态包，自建托管用） | [web-v1.0.1](https://github.com/Aluminium0926/doc-tree/releases/tag/web-v1.0.1) |
-| `DocTree-1.0.4-win32-x64.zip`（Windows 便携版） | [v1.0.4](https://github.com/Aluminium0926/doc-tree/releases/tag/v1.0.4) |
+| `DocTree-android.apk` | [android-v1.0.4](https://github.com/Aluminium0926/doc-tree/releases/tag/android-v1.0.4) |
+| `DocTree-mac-arm64.zip`（Apple Silicon） | [mac-arm64-v1.0.2](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.2) |
+| `DocTree-mac-x64.zip`（Intel Mac） | [mac-x64-v1.0.2](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.2) |
+| `DocTree-web-v1.0.2.zip`（静态包，自建托管用） | [web-v1.0.2](https://github.com/Aluminium0926/doc-tree/releases/tag/web-v1.0.2) |
+| `DocTree-1.0.5-win32-x64.zip`（Windows 便携版） | [v1.0.5](https://github.com/Aluminium0926/doc-tree/releases/tag/v1.0.5) |
 
 ## 快速开始（源码）
 
@@ -153,20 +161,20 @@ npm run dist    # 用 electron-packager 打包到 release/
 ### 手机 / 安卓 / 鸿蒙
 
 - **网页版（最省事）**：https://aluminium0926.github.io/doc-tree/
-- **安卓 APK**：`android-v1.0.3` 里的 `DocTree-android.apk`
+- **安卓 APK**：`android-v1.0.4` 里的 `DocTree-android.apk`
   - WebView + 应用内本地服务（`127.0.0.1:47201`），数据存 IndexedDB，模型请求经本地代理
   - 架构与构建步骤见 [安卓与鸿蒙](docs/安卓与鸿蒙.md)
 - **HarmonyOS NEXT**：系统自带**卓易通**（安卓运行时），用它安装同一个 APK 即可，装完就是一个普通 App。不装就用网页版（PWA 可添加到桌面）；用 ArkTS `Web` 组件套壳也能复用 `mobile/www`
 - **iOS**：Safari 打开网页版 → 分享 → 添加到主屏幕；长按选中提问、导出、存储持久化都做了适配
-- **自建自托管**：`DocTree-web-v1.0.1.zip` 解压后任意静态服务器托管；`HOST=0.0.0.0 node mobile/static-server.mjs` 会打印手机可访问地址
+- **自建自托管**：`DocTree-web-v1.0.2.zip` 解压后任意静态服务器托管；`HOST=0.0.0.0 node mobile/static-server.mjs` 会打印手机可访问地址
 
 ### macOS
 
 三种方式，按省事程度排：
 
 1. **现成安装包**（推荐）
-   - Apple Silicon：[mac-arm64-v1.0.1](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.1) → `DocTree-mac-arm64.zip`
-   - Intel：[mac-x64-v1.0.1](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.1) → `DocTree-mac-x64.zip`
+   - Apple Silicon：[mac-arm64-v1.0.2](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.2) → `DocTree-mac-arm64.zip`
+   - Intel：[mac-x64-v1.0.2](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.2) → `DocTree-mac-x64.zip`
 
    解压后**双击「首次打开.command」**：它会自动去掉隔离标记、做本地临时签名，然后启动。
 

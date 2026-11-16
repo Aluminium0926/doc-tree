@@ -1,4 +1,4 @@
-// 移动端本地存储：IndexedDB
+﻿// 移动端本地存储：IndexedDB
 const DB_NAME = 'doctree'
 const DB_VER = 1
 let dbp = null
@@ -52,7 +52,10 @@ export async function listDocs() {
       kind: d.kind,
       pages: d.pages?.length || 0,
       bytes: d.bytes || 0,
-      createdAt: d.createdAt || 0
+      createdAt: d.createdAt || 0,
+      hash: d.hash || '',
+      hidden: Boolean(d.hidden),
+      updatedAt: d.updatedAt || d.createdAt || 0
     }))
     .sort((a, b) => b.createdAt - a.createdAt)
 }
@@ -60,6 +63,20 @@ export async function listDocs() {
 export async function getDoc(id) {
   const db = await open()
   return wrap(db.transaction('docs').objectStore('docs').get(id))
+}
+
+export async function listDocsRaw() {
+  const db = await open()
+  return wrap(db.transaction('docs').objectStore('docs').getAll())
+}
+
+export async function setHidden(id, hidden) {
+  const doc = await getDoc(id)
+  if (!doc) return false
+  doc.hidden = Boolean(hidden)
+  doc.updatedAt = Date.now()
+  await saveDoc(doc)
+  return true
 }
 
 export async function saveDoc(doc) {

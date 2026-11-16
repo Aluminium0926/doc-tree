@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <meta name="theme-color" content="#0a0c11">
 <script src="/theme.js"></script>
-<link rel="stylesheet" href="/style.css?v=47">
+<link rel="stylesheet" href="/style.css?v=61">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <link id="hljs-theme" rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
 <script src="/vendor/highlight/highlight.min.js" defer></script>
@@ -15,15 +15,10 @@
 <body>
 <div id="app">
   <aside id="library">
-    <div class="rail">
-      <button id="btn-expand" title="展开文件列表（Ctrl+B）">»</button>
-      <span>文档</span>
-    </div>
     <div class="lib-head">
       <span class="logo">文档树</span>
       <div class="lib-actions">
         <button id="btn-settings" class="icon" title="设置">⚙</button>
-        <button id="btn-collapse" class="icon" title="收起文件列表（Ctrl+B）">«</button>
       </div>
     </div>
     <label class="import">
@@ -38,8 +33,11 @@
   <main id="viewer">
     <header id="toolbar">
       <div class="tb-left">
-        <div class="tb-title" id="doc-title">未打开文档</div>
-        <div class="tb-meta" id="doc-meta"></div>
+        <button id="btn-sidebar" class="icon" title="显示/隐藏文档列表（Ctrl+B）"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button>
+        <div class="tb-text">
+          <div class="tb-title" id="doc-title">未打开文档</div>
+          <div class="tb-meta" id="doc-meta"></div>
+        </div>
       </div>
       <div class="tb-actions">
         <div class="zoom-group">
@@ -109,6 +107,7 @@
 </div>
 
 <div id="float-menu" hidden></div>
+<div id="page-menu" class="ctx-menu" hidden><button id="pm-explain">讲解本页</button></div>
 
 <div id="treeview" class="modal" hidden>
   <div class="tv-card">
@@ -121,13 +120,54 @@
   </div>
 </div>
 
+<div id="welcome" class="modal" hidden>
+  <div class="modal-card welcome-card">
+    <h3>文档树 · DocTree</h3>
+    <p class="ask-text">本项目完全免费开源，官方版本永远免费。</p>
+    <p class="ask-text">从第三方购买与本项目无关；官方下载：GitHub Releases</p>
+    <p class="welcome-link"><a id="welcome-repo" href="https://github.com/Aluminium0926/doc-tree/releases" target="_blank" rel="noopener">github.com/Aluminium0926/doc-tree/releases</a></p>
+    <p class="welcome-ver" id="welcome-ver"></p>
+    <div class="modal-actions">
+      <button id="welcome-ok">知道了</button>
+    </div>
+  </div>
+</div>
+<div id="update" class="modal" hidden>
+  <div class="modal-card welcome-card">
+    <h3>发现新版本</h3>
+    <p class="ask-text" id="update-text"></p>
+    <label class="cfg-check"><input type="checkbox" id="update-skip"> 不再提醒这个版本</label>
+    <div class="modal-actions">
+      <button id="update-later" class="ghost">稍后</button>
+      <button id="update-go">前往下载</button>
+    </div>
+  </div>
+</div>
+<div id="ask" class="modal" hidden>
+  <div class="modal-card">
+    <h3 id="ask-title">移出列表</h3>
+    <p id="ask-text" class="ask-text"></p>
+    <label class="cfg-check"><input type="checkbox" id="ask-never"> 下次不再提示</label>
+    <div class="modal-actions">
+      <button id="ask-cancel" class="ghost">取消</button>
+      <button id="ask-ok">移出</button>
+    </div>
+  </div>
+</div>
 <div id="settings" class="modal" hidden>
   <div class="modal-card">
     <h3>模型设置</h3>
     <label>Base URL<input id="cfg-base" placeholder="https://api.deepseek.com/v1"></label>
     <label>API Key<input id="cfg-key" placeholder="留空则不修改" autocomplete="off"></label>
     <label>对话模型<input id="cfg-model" placeholder="deepseek-flash"></label>
+    <label>接口格式<select id="cfg-format"><option value="auto">自动（按地址判断）</option><option value="openai">OpenAI 兼容</option><option value="anthropic">Anthropic</option></select></label>
     <label>视觉模型（截图提问用）<input id="cfg-vision" placeholder="留空则用对话模型"></label>
+    <label>视觉 Base URL（可选）<input id="cfg-vision-base" placeholder="留空则用上面的 Base URL"></label>
+    <label>视觉 API Key（可选）<input id="cfg-vision-key" placeholder="留空则用上面的 Key" autocomplete="off"></label>
+    <label>视觉接口格式<select id="cfg-vision-format"><option value="auto">自动（按地址判断）</option><option value="openai">OpenAI 兼容</option><option value="anthropic">Anthropic</option></select></label>
+    <label class="cfg-check"><input type="checkbox" id="cfg-ask-remove"> 移出文档前先确认</label>
+    <label class="cfg-check"><input type="checkbox" id="cfg-update-check"> 启动时检查新版本（取消勾选即静默）</label>
+    <p class="welcome-ver" id="settings-ver"></p>
     <div class="modal-actions">
       <button id="cfg-cancel" class="ghost">取消</button>
       <button id="cfg-save">保存</button>
@@ -136,7 +176,7 @@
 </div>
 
 <script src="/vendor/katex/katex.min.js"></script>
-<script type="module" src="/app.js?v=47"></script>
+<script type="module" src="/app.js?v=61"></script>
 <div id="theme-pop" class="theme-pop" hidden>
   <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
   <div class="tp-seg" id="tp-mode">

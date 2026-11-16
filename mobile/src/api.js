@@ -1,4 +1,4 @@
-// 本地 API：把前端的 /api/* 请求映射到 IndexedDB + 浏览器内解析 + 模型代理
+﻿// 本地 API：把前端的 /api/* 请求映射到 IndexedDB + 浏览器内解析 + 模型代理
 import * as db from './db.js'
 import { extract } from './extract.js'
 import { publicConfig, readConfig, writeConfig } from './config.js'
@@ -95,7 +95,10 @@ async function handleAsk(init) {
   const tree = await db.getTree(body.docId)
   const cfg = readConfig()
   const id = hex(6)
-  const useModel = body.image && cfg.visionModel ? cfg.visionModel : cfg.model
+  const useModel = body.image ? cfg.visionModel || cfg.model : cfg.model
+  const provider = body.image
+    ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat }
+    : null
   const node = {
     id,
     docId: body.docId,
@@ -122,6 +125,7 @@ async function handleAsk(init) {
         },
         {
           model: useModel,
+          provider,
           onReasoning: (t) => {
             node.reasoning = (node.reasoning || '') + t
             send({ type: 'reasoning', text: t })
@@ -139,6 +143,12 @@ async function handleAsk(init) {
   })
 }
 
+async function sha256hex(buf) {
+  const data = buf instanceof ArrayBuffer ? buf : buf.buffer
+  const d = await crypto.subtle.digest('SHA-256', data)
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 async function handleApi(path, init) {
   const method = (init?.method || 'GET').toUpperCase()
   const p = new URL(path, location.href).pathname
@@ -150,10 +160,12 @@ async function handleApi(path, init) {
   if (p === '/api/config' && method === 'POST') {
     const body = await bodyJson(init)
     const patch = {}
-    for (const k of ['baseUrl', 'model', 'visionModel']) {
+    for (const k of ['baseUrl', 'model', 'visionModel', 'visionBaseUrl', 'apiFormat', 'visionFormat']) {
       if (typeof body[k] === 'string' && body[k].trim()) patch[k] = body[k].trim()
     }
     if (typeof body.apiKey === 'string' && body.apiKey.trim()) patch.apiKey = body.apiKey.trim()
+    if (typeof body.visionApiKey === 'string' && body.visionApiKey.trim()) patch.visionApiKey = body.visionApiKey.trim()
+    if (body.visionBaseUrl === '') patch.visionBaseUrl = ''
     if (['low', 'high', 'max'].includes(body.effort)) patch.effort = body.effort
     writeConfig(patch)
     return json({ config: publicConfig() })
@@ -165,6 +177,29 @@ async function handleApi(path, init) {
     const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase()
     // pdf.js 会把传入的 ArrayBuffer transfer 掉，先固化成 Blob 再解析
     const blob = new Blob([buf])
+    const hash = await sha256hex(buf)
+
+    // 同一份文件再次导入（可能之前被移出列表）→ 复用原文档，提问树还在
+    for (const d of await db.listDocsRaw()) {
+      let h = d.hash
+      if (!h) {
+        try {
+          const f = await db.getFile(d.id)
+          if (f?.blob) {
+            h = await sha256hex(await f.blob.arrayBuffer())
+            d.hash = h
+            await db.saveDoc(d)
+          }
+        } catch {}
+      }
+      if (h !== hash) continue
+      d.hidden = false
+      d.filename = name
+      d.updatedAt = Date.now()
+      await db.saveDoc(d)
+      return json({ doc: { id: d.id, title: d.title, kind: d.kind, pages: (d.pages || []).length }, revived: true })
+    }
+
     const { kind, pages } = await extract(buf.slice(0), ext)
     const id = hex(6)
     await db.saveFile(id, blob, ext)
@@ -177,11 +212,26 @@ async function handleApi(path, init) {
       pages,
       summary: '',
       bytes: buf.byteLength || buf.length || 0,
-      createdAt: Date.now()
+      hash,
+      hidden: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     }
     await db.saveDoc(doc)
     makeSummary(doc)
     return json({ doc: { id: doc.id, title: doc.title, kind: doc.kind, pages: pages.length } })
+  }
+
+  if (p === '/api/doc/restore' && method === 'POST') {
+    const body = await bodyJson(init)
+    await db.setHidden(body.id, false)
+    return json({ ok: true })
+  }
+
+  if (p === '/api/doc/purge' && method === 'POST') {
+    const body = await bodyJson(init)
+    await db.deleteDoc(body.id)
+    return json({ ok: true })
   }
 
   {
@@ -192,8 +242,8 @@ async function handleApi(path, init) {
       return json({ doc, tree: await db.getTree(m[1]) })
     }
     if (m && method === 'DELETE') {
-      await db.deleteDoc(m[1])
-      return json({ ok: true })
+      await db.setHidden(m[1], true)
+      return json({ ok: true, hidden: true })
     }
   }
 
