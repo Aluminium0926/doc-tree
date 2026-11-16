@@ -913,7 +913,7 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 
 /* 服务端版本过期提示 */
 .stale {
-  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  position: fixed; left: 50%; top: 12px; transform: translateX(-50%);
   z-index: 120; display: flex; align-items: center; gap: 12px;
   max-width: min(620px, calc(100vw - 32px));
   padding: 10px 14px; border-radius: 10px;
