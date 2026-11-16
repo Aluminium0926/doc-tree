@@ -14,8 +14,8 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v61'
-const APP_VERSION = '1.0.5'
+const UI_VERSION = 'v64'
+const APP_VERSION = '1.0.6'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -120,6 +120,40 @@ function enhanceCodeBlocks(root) {
 }
 
 // 先抽出公式占位，Markdown 渲染完再交给 KaTeX，避免换行/<br> 把 $$ 块切碎
+
+// 轻量 HTML 清洗：保留排版/公式，去掉脚本、事件属性与危险 URL
+const DROP_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'input', 'button', 'textarea', 'select', 'video', 'audio', 'source', 'track'])
+function sanitizeHtml(html) {
+  const tpl = document.createElement('template')
+  tpl.innerHTML = html
+  const walk = (node) => {
+    for (const el of [...node.children]) {
+      const tag = el.tagName.toLowerCase()
+      if (DROP_TAGS.has(tag)) {
+        el.remove()
+        continue
+      }
+      for (const attr of [...el.attributes]) {
+        const n = attr.name.toLowerCase()
+        const v = attr.value || ''
+        if (n.startsWith('on') || n === 'srcdoc' || n === 'formaction') {
+          el.removeAttribute(attr.name)
+          continue
+        }
+        if (n === 'style') {
+          if (/url\s*\(|expression\s*\(|javascript:/i.test(v)) el.removeAttribute('style')
+          continue
+        }
+        if ((n === 'href' || n === 'xlink:href') && /^\s*(javascript|vbscript|data):/i.test(v)) el.removeAttribute(attr.name)
+        if (n === 'src' && !/^(https?:|data:image\/|\/|\.\/|blob:)/i.test(v)) el.removeAttribute(attr.name)
+      }
+      walk(el)
+    }
+  }
+  walk(tpl.content)
+  return tpl.innerHTML
+}
+
 function renderMarkdown(src) {
   const store = []
   const fences = []
@@ -157,7 +191,7 @@ function renderMarkdown(src) {
       return `<code>${it.tex}</code>`
     }
   })
-  return html
+  return sanitizeHtml(html)
 }
 
 const S = {
@@ -1643,6 +1677,18 @@ function setZoom(z) {
   }
 }
 
+
+function syncAnthropicNote() {
+  const note = $('#anthropic-note')
+  if (!note) return
+  const fmt = $('#cfg-format')?.value
+  const vfmt = $('#cfg-vision-format')?.value
+  const base = ($('#cfg-base')?.value || '').toLowerCase()
+  const vbase = ($('#cfg-vision-base')?.value || '').toLowerCase()
+  const isAnthropic = fmt === 'anthropic' || vfmt === 'anthropic' || /anthropic\.com/.test(base) || /anthropic\.com/.test(vbase)
+  note.hidden = !isAnthropic
+}
+
 function openSettings() {
   $('#cfg-base').value = S.cfg?.baseUrl || ''
   $('#cfg-model').value = S.cfg?.model || ''
@@ -1656,6 +1702,10 @@ function openSettings() {
   if (sver) sver.textContent = `当前版本 ${UI_VERSION} · ${APP_VERSION}`
   const upChk = $('#cfg-update-check')
   if (upChk) upChk.checked = localStorage.getItem('dt:verCheckOff') !== '1'
+  syncAnthropicNote()
+  $('#cfg-format')?.addEventListener('change', syncAnthropicNote)
+  $('#cfg-vision-format')?.addEventListener('change', syncAnthropicNote)
+  $('#cfg-base')?.addEventListener('input', syncAnthropicNote)
   const noAsk = $('#cfg-ask-remove')
   if (noAsk) noAsk.checked = localStorage.getItem(NO_ASK_REMOVE) !== '1'
   $('#settings').hidden = false

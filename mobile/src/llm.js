@@ -17,10 +17,12 @@ function endpointFor(cfg, provider) {
   return base + '/chat/completions'
 }
 
-function authHeaders(cfg, provider, format) {
+function authHeaders(cfg, provider, format, direct) {
   const key = provider?.apiKey || cfg.apiKey
   if (format === 'anthropic') {
-    return { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
+    const h = { 'x-api-key': key, 'anthropic-version': '2023-06-01' }
+    if (direct) h['anthropic-dangerous-direct-browser-access'] = 'true'
+    return h
   }
   return { authorization: `Bearer ${key}` }
 }
@@ -29,7 +31,7 @@ function proxyHeaders(cfg, provider) {
   const base = provider?.baseUrl || cfg.baseUrl
   const format = resolveFormat(base, provider?.format ?? cfg.apiFormat)
   return {
-    ...authHeaders(cfg, provider, format),
+    ...authHeaders(cfg, provider, format, false),
     'content-type': 'application/json',
     'x-target': endpointFor(cfg, provider)
   }
@@ -38,7 +40,7 @@ function proxyHeaders(cfg, provider) {
 function directHeaders(cfg, provider) {
   const base = provider?.baseUrl || cfg.baseUrl
   const format = resolveFormat(base, provider?.format ?? cfg.apiFormat)
-  return { ...authHeaders(cfg, provider, format), 'content-type': 'application/json' }
+  return { ...authHeaders(cfg, provider, format, true), 'content-type': 'application/json' }
 }
 
 function explain(status, body) {
@@ -196,6 +198,7 @@ export async function streamChat(messages, onDelta, { signal, model, onReasoning
           messages,
           stream: true,
           temperature: cfg.temperature,
+          max_tokens: 2048,
           ...thinkingParams(cfg)
         })
 
