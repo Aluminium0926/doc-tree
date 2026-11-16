@@ -14,7 +14,7 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v65'
+const UI_VERSION = 'v66'
 const APP_VERSION = '1.0.6'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
@@ -598,15 +598,36 @@ async function relayoutPages() {
   }
 }
 
+
+function checkStaleServer() {
+  const el = $('#stale')
+  if (!el) return
+  const v = S.serverVersion
+  const isWeb = window.DT_LOCAL === true
+  if (!isWeb && !v) {
+    $('#stale-text').textContent = '当前界面已更新，但服务端仍在运行旧代码（未返回版本号）。请完全退出应用后重新打开——Ctrl+R 只刷新界面，不会重载服务端。'
+    el.hidden = false
+    return
+  }
+  if (!v || v === APP_VERSION) {
+    el.hidden = true
+    return
+  }
+  $('#stale-text').textContent = `服务端版本 ${v}，界面版本 ${APP_VERSION}：代码已更新，但服务端还在用旧版本。请完全退出应用后重新打开（Ctrl+R 只刷新界面，不会重载服务端）。`
+  el.hidden = false
+}
+
 async function loadState() {
   const r = await fetch('/api/state').then((x) => x.json())
   S.docs = r.docs || []
   S.cfg = r.config || {}
+  S.serverVersion = r.serverVersion || ''
   if (!S.cfg.hasKey) setStatus('未配置 API Key')
   const i = Math.max(0, EFFORT_IDS.indexOf(S.cfg.effort))
   $('#effort').value = i
   $('#effort-label').textContent = EFFORT_LABELS[i]
   paintRange($('#effort'))
+  checkStaleServer()
 }
 
 const NO_ASK_REMOVE = 'dt:noAskRemove'
@@ -1576,6 +1597,17 @@ function bindPageMenu() {
     S.pendingParent = null
     S.pendingShot = null
     S.pendingAnchor = { kind: 'doc', page: pageNo, quote: '' }
+    // 没有文字层的页（扫描件）：直接把这一页的渲染图交给视觉模型
+    const page = (S.doc.pages || []).find((p) => p.no === pageNo)
+    const text = (page?.text || '').trim()
+    if (text.length < 20) {
+      const cv = document.querySelector(`.page[data-page="${pageNo}"] canvas`)
+      if (cv) {
+        try {
+          S.pendingShot = cv.toDataURL('image/jpeg', 0.85)
+        } catch {}
+      }
+    }
     send('讲解本页内容')
   })
 
@@ -2188,6 +2220,7 @@ function bind() {
   })
 
   $('#btn-send').addEventListener('click', () => send())
+  $('#stale-x')?.addEventListener('click', () => { const el = $('#stale'); if (el) el.hidden = true })
 
   const locateBtn = $('#btn-locate')
   if (locateBtn) {

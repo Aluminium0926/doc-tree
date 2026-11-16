@@ -910,3 +910,16 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
   margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--line);
   font-size: 10.5px; line-height: 1.6; color: var(--dim-2);
 }
+
+/* 服务端版本过期提示 */
+.stale {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 120; display: flex; align-items: center; gap: 12px;
+  max-width: min(620px, calc(100vw - 32px));
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  box-shadow: var(--shadow); color: var(--text); font-size: 12.5px; line-height: 1.6;
+}
+.stale[hidden] { display: none; }
+.stale button { border: 0; background: none; color: var(--dim); font-size: 16px; padding: 0 2px; border-radius: 6px; }
+.stale button:hover { color: var(--text); background: var(--panel-3); }

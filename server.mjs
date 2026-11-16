@@ -12,6 +12,14 @@ import * as llm from './lib/llm.mjs'
 import { buildAskMessages, buildSummaryMessages, treeToMarkdown } from './lib/context.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const SERVER_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version
+  } catch {
+    return '0.0.0'
+  }
+})()
+
 const PUBLIC = path.join(__dirname, 'public')
 const PORT = Number(process.env.PORT || 4317)
 const summaryTried = new Set()
@@ -81,7 +89,7 @@ async function handleApi(req, res, url) {
   const p = url.pathname
 
   if (p === '/api/state' && req.method === 'GET') {
-    return json(res, 200, { docs: await store.listDocs(), config: llm.publicConfig() })
+    return json(res, 200, { docs: await store.listDocs(), config: llm.publicConfig(), serverVersion: SERVER_VERSION })
   }
 
   if (p === '/api/config' && req.method === 'POST') {

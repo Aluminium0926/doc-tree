@@ -1,20 +1,19 @@
-﻿{
+{
   "name": "doc-tree",
   "productName": "文档树",
   "version": "1.0.6",
-  "private": false,
-  "description": "本地文档阅读器：划词提问，回答可继续追问，形成锚定原文的树",
+  "private": true,
+  "description": "本地文档阅读器 + 锚定原文的追问树",
   "type": "module",
   "main": "desktop/main.cjs",
-  "license": "MIT",
-  "keywords": ["pdf", "reader", "llm", "annotation", "tree", "local-first"],
   "scripts": {
     "start": "node server.mjs",
     "app": "electron .",
     "mock": "node scripts/mock-llm.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "dist": "electron-packager . DocTree --platform=win32 --arch=x64 --out=release --overwrite --asar=false --prune=true --ignore=^/release --ignore=^/\\.npm-cache --ignore=^/scripts"
+    "dist": "electron-packager . DocTree --platform=win32 --arch=x64 --out=release --overwrite --asar=false --prune=true --ignore=^/release --ignore=^/\\.npm-cache --ignore=^/scripts --ignore=^/docs"
   },
+  "license": "MIT",
   "dependencies": {
     "katex": "^0.19.1",
     "mammoth": "^1.13.0",
