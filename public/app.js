@@ -14,7 +14,7 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v66'
+const UI_VERSION = 'v67'
 const APP_VERSION = '1.0.6'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
@@ -197,6 +197,10 @@ function renderMarkdown(src) {
 const S = {
   cfg: null,
   docs: [],
+  groups: [],
+  selecting: false,
+  selected: new Set(),
+  collapsedGroups: new Set(JSON.parse(localStorage.getItem('dt:collapsedGroups') || '[]')),
   doc: null,
   tree: { nodes: {} },
   pdfjs: null,
@@ -620,6 +624,7 @@ function checkStaleServer() {
 async function loadState() {
   const r = await fetch('/api/state').then((x) => x.json())
   S.docs = r.docs || []
+  S.groups = r.groups || []
   S.cfg = r.config || {}
   S.serverVersion = r.serverVersion || ''
   if (!S.cfg.hasKey) setStatus('未配置 API Key')
@@ -660,6 +665,38 @@ function confirmRemove(title) {
   })
 }
 /* ================= 左侧文档库 ================= */
+function docRow(d, inGroup) {
+  const el = document.createElement('div')
+  const active = S.doc && S.doc.id === d.id
+  el.className = 'doc-item' + (active ? ' active' : '') + (inGroup ? ' in-group' : '') + (S.selecting && !inGroup ? ' selecting' : '')
+  el.dataset.id = d.id
+  const check = S.selecting && !inGroup ? `<span class="doc-check${S.selected.has(d.id) ? ' on' : ''}"></span>` : ''
+  el.innerHTML = `${check}<span class="doc-ico" data-kind="${esc(d.kind)}">${esc((d.kind || '?').toUpperCase())}</span>
+    <span class="t" title="${esc(d.title)}">${esc(d.title)}</span>
+    ${S.selecting ? '' : '<button class="x" title="移出列表（保留提问树）">✕</button>'}`
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return
+    if (S.selecting && !inGroup) {
+      if (S.selected.has(d.id)) S.selected.delete(d.id)
+      else S.selected.add(d.id)
+      renderLibrary()
+      updateGroupBar()
+      return
+    }
+    openDoc(d.id)
+  })
+  el.querySelector('.x')?.addEventListener('click', async (e) => {
+    e.stopPropagation()
+    if (!(await confirmRemove(d.title))) return
+    await fetch(`/api/doc/${d.id}`, { method: 'DELETE' })
+    if (S.doc && S.doc.id === d.id) resetViewer()
+    await loadState()
+    renderLibrary()
+    toast('已移出列表，重新导入同一文件即可恢复')
+  })
+  return el
+}
+
 function renderLibrary() {
   const box = $('#doc-list')
   box.innerHTML = ''
@@ -669,28 +706,37 @@ function renderLibrary() {
     box.innerHTML = '<div class="tree-empty">还没有文档</div>'
     return
   }
-  for (const d of visible) {
-    const el = document.createElement('div')
-    el.className = 'doc-item' + (S.doc && S.doc.id === d.id ? ' active' : '')
-    el.dataset.id = d.id
-    el.innerHTML = `<span class="doc-ico" data-kind="${esc(d.kind)}">${esc((d.kind || '?').toUpperCase())}</span>
-      <span class="t" title="${esc(d.title)}">${esc(d.title)}</span>
-      <button class="x" title="移出列表（保留提问树）">✕</button>`
-    el.addEventListener('click', (e) => {
-      if (e.target.closest('button')) return
-      openDoc(d.id)
+  const groups = S.groups || []
+  const groupedIds = new Set(groups.flatMap((g) => g.docIds))
+  const rootDocs = visible.filter((d) => !groupedIds.has(d.id))
+
+  for (const g of groups) {
+    const members = g.docIds.map((id) => visible.find((d) => d.id === id)).filter(Boolean)
+    if (!members.length) continue
+    const open = !S.collapsedGroups.has(g.id)
+    const row = document.createElement('div')
+    row.className = 'doc-group'
+    row.innerHTML = `<span class="g-chev">${open ? '▾' : '▸'}</span><span class="g-name" title="${esc(g.name)}">${esc(g.name)}</span><em class="g-count">${members.length}</em><button class="g-x" title="解散组">✕</button>`
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.g-x')) return
+      if (S.collapsedGroups.has(g.id)) S.collapsedGroups.delete(g.id)
+      else S.collapsedGroups.add(g.id)
+      localStorage.setItem('dt:collapsedGroups', JSON.stringify([...S.collapsedGroups]))
+      renderLibrary()
     })
-    el.querySelector('.x').addEventListener('click', async (e) => {
+    row.querySelector('.g-x').addEventListener('click', async (e) => {
       e.stopPropagation()
-      if (!(await confirmRemove(d.title))) return
-      await fetch(`/api/doc/${d.id}`, { method: 'DELETE' })
-      if (S.doc && S.doc.id === d.id) resetViewer()
+      if (!confirm(`解散「${g.name}」？\n提问树会复制给组内每份文档，内容不会丢。`)) return
+      await fetch('/api/group/dissolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: g.id }) })
       await loadState()
       renderLibrary()
-      toast('已移出列表，重新导入同一文件即可恢复')
+      toast('已解散，提问树已复制到各文档')
     })
-    box.appendChild(el)
+    box.appendChild(row)
+    if (open) for (const d of members) box.appendChild(docRow(d, true))
   }
+
+  for (const d of rootDocs) box.appendChild(docRow(d, false))
 
   if (hidden.length) {
     const head = document.createElement('div')
@@ -721,6 +767,52 @@ function renderLibrary() {
       box.appendChild(el)
     }
   }
+}
+
+function updateGroupBar() {
+  const n = S.selected.size
+  const c = $('#group-bar-count')
+  if (c) c.textContent = `已选 ${n} 份`
+  const btn = $('#group-create')
+  if (btn) btn.disabled = n < 2
+}
+
+function startSelecting() {
+  S.selecting = true
+  S.selected = new Set()
+  const bar = $('#group-bar')
+  if (bar) bar.hidden = false
+  $('#btn-group')?.classList.add('on')
+  updateGroupBar()
+  renderLibrary()
+}
+
+function cancelSelecting() {
+  S.selecting = false
+  S.selected = new Set()
+  const bar = $('#group-bar')
+  if (bar) bar.hidden = true
+  $('#btn-group')?.classList.remove('on')
+  renderLibrary()
+}
+
+async function createGroupFromSelection() {
+  const ids = [...S.selected]
+  if (ids.length < 2) return toast('至少选两份文档')
+  const name = ($('#group-name')?.value || '').trim() || `组 ${(S.groups || []).length + 1}`
+  const r = await fetch('/api/group', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, docIds: ids })
+  })
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}))
+    return toast(j.error || '创建失败')
+  }
+  cancelSelecting()
+  await loadState()
+  renderLibrary()
+  toast(`已创建「${name}」，组内共享提问树`)
 }
 
 async function importFiles(files) {
@@ -1142,6 +1234,12 @@ function hideFloat() {
 
 /* ================= 追问树 ================= */
 function renderTree() {
+  const g = (S.groups || []).find((x) => (x.docIds || []).includes(S.doc?.id))
+  const tag = $('#tree-group')
+  if (tag) {
+    tag.hidden = !g
+    tag.textContent = g ? g.name : ''
+  }
   const nodes = Object.values(S.tree.nodes || {})
   $('#node-count').textContent = nodes.length ? `(${nodes.length})` : ''
   const locate = $('#btn-locate')
@@ -2311,6 +2409,9 @@ function bind() {
   bindWheelZoom()
   bindPageMenu()
   $('#btn-shot').addEventListener('click', () => toggleShot())
+  $('#btn-group')?.addEventListener('click', () => (S.selecting ? cancelSelecting() : startSelecting()))
+  $('#group-create')?.addEventListener('click', createGroupFromSelection)
+  $('#group-cancel')?.addEventListener('click', cancelSelecting)
 
   // 工具条：页码 / 旋转 / 荧光笔 / 擦除
   $('#btn-prev').addEventListener('click', () => turnPage(-1))

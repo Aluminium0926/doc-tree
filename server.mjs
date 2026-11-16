@@ -89,7 +89,7 @@ async function handleApi(req, res, url) {
   const p = url.pathname
 
   if (p === '/api/state' && req.method === 'GET') {
-    return json(res, 200, { docs: await store.listDocs(), config: llm.publicConfig(), serverVersion: SERVER_VERSION })
+    return json(res, 200, { docs: await store.listDocs(), groups: await store.listGroups(), config: llm.publicConfig(), serverVersion: SERVER_VERSION })
   }
 
   if (p === '/api/config' && req.method === 'POST') {
@@ -189,6 +189,31 @@ async function handleApi(req, res, url) {
     }
   }
 
+if (p === '/api/group' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req) || '{}')
+    const ids = Array.isArray(body.docIds) ? body.docIds.filter(Boolean).slice(0, 50) : []
+    if (ids.length < 2) return json(res, 400, { error: '至少选择两份文档' })
+    const g = await store.createGroup(String(body.name || '').trim(), ids)
+    return json(res, 200, { group: g })
+  }
+
+  if (p === '/api/group/update' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req) || '{}')
+    const g = await store.updateGroup(body.id, {
+      name: body.name,
+      add: Array.isArray(body.add) ? body.add : [],
+      remove: Array.isArray(body.remove) ? body.remove : []
+    })
+    if (!g) return json(res, 404, { error: '组不存在' })
+    return json(res, 200, { group: g })
+  }
+
+  if (p === '/api/group/dissolve' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req) || '{}')
+    await store.dissolveGroup(body.id)
+    return json(res, 200, { ok: true })
+  }
+
   if (p === '/api/doc/restore' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req) || '{}')
     await store.setHidden(body.id, false)
@@ -274,6 +299,11 @@ async function handleAsk(req, res) {
 
   const doc = await store.getDoc(body.docId)
   if (!doc) return json(res, 404, { error: '文档不存在' })
+  const group = await store.groupOfDoc(doc.id)
+  let docs = [doc]
+  if (group) {
+    docs = (await Promise.all(group.docIds.map((id) => store.getDoc(id)))).filter(Boolean)
+  }
 
   // 摘要缺失时自愈（例如导入时服务被重启打断）
   if (!doc.summary && !summaryTried.has(doc.id)) {
@@ -322,7 +352,7 @@ async function handleAsk(req, res) {
   req.on('close', () => ac.abort())
 
   try {
-    const messages = buildAskMessages({ doc, tree, node, image: body.image })
+    const messages = buildAskMessages({ docs, tree, node, image: body.image })
     await llm.streamChat(
       messages,
       (d) => {

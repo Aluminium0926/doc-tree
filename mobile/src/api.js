@@ -92,7 +92,11 @@ async function handleAsk(init) {
 
   if (!doc.summary) makeSummary(doc)
 
-  const tree = await db.getTree(body.docId)
+  const group = groupOfDoc(doc.id)
+  let docs = [doc]
+  if (group) docs = (await Promise.all(group.docIds.map((id) => db.getDoc(id)))).filter(Boolean)
+
+  const tree = await docTree(body.docId)
   const cfg = readConfig()
   const id = hex(6)
   const useModel = body.image ? cfg.visionModel || cfg.model : cfg.model
@@ -111,12 +115,12 @@ async function handleAsk(init) {
     createdAt: Date.now()
   }
   tree.nodes[id] = node
-  await db.saveTree(body.docId, tree)
+  await saveDocTree(body.docId, tree)
 
   return sseResponse(async (send) => {
     send({ type: 'meta', node })
     try {
-      const messages = buildAskMessages({ doc, tree, node, image: body.image })
+      const messages = buildAskMessages({ docs, tree, node, image: body.image })
       await streamChat(
         messages,
         (d) => {
@@ -138,7 +142,7 @@ async function handleAsk(init) {
     }
     if (node.reasoning) node.reasoning = node.reasoning.slice(0, 6000)
     delete node.status
-    await db.saveTree(body.docId, tree)
+    await saveDocTree(body.docId, tree)
     send({ type: 'done', node })
   })
 }
@@ -149,12 +153,42 @@ async function sha256hex(buf) {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+// ---------- 文档组（移动端：localStorage + 组树存 trees 库） ----------
+const GROUPS_KEY = 'dt:groups'
+function readGroups() {
+  try {
+    const g = JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]')
+    return Array.isArray(g) ? g : []
+  } catch {
+    return []
+  }
+}
+function writeGroups(groups) {
+  localStorage.setItem(GROUPS_KEY, JSON.stringify(groups))
+}
+function groupOfDoc(docId) {
+  return readGroups().find((g) => g.docIds.includes(docId)) || null
+}
+async function docTree(docId) {
+  const g = groupOfDoc(docId)
+  return db.getTree(g ? 'group:' + g.id : docId)
+}
+async function saveDocTree(docId, tree) {
+  const g = groupOfDoc(docId)
+  await db.saveTree(g ? 'group:' + g.id : docId, tree)
+}
+
 async function handleApi(path, init) {
   const method = (init?.method || 'GET').toUpperCase()
   const p = new URL(path, location.href).pathname
 
   if (p === '/api/state' && method === 'GET') {
-    return json({ docs: await db.listDocs(), config: publicConfig() })
+    const groups = readGroups()
+    const docs = (await db.listDocs()).map((d) => ({
+      ...d,
+      groupId: groups.find((g) => g.docIds.includes(d.id))?.id || null
+    }))
+    return json({ docs, groups, config: publicConfig() })
   }
 
   if (p === '/api/config' && method === 'POST') {
@@ -222,6 +256,36 @@ async function handleApi(path, init) {
     return json({ doc: { id: doc.id, title: doc.title, kind: doc.kind, pages: pages.length } })
   }
 
+  if (p === '/api/group' && method === 'POST') {
+    const body = await bodyJson(init)
+    const ids = Array.isArray(body.docIds) ? body.docIds.filter(Boolean).slice(0, 50) : []
+    if (ids.length < 2) return json({ error: '至少选择两份文档' }, 400)
+    const groups = readGroups()
+    const id = hex(4)
+    const nodes = {}
+    for (const docId of ids) {
+      const own = await db.getTree(docId)
+      Object.assign(nodes, own.nodes || {})
+    }
+    await db.saveTree('group:' + id, { nodes })
+    for (const g of groups) g.docIds = g.docIds.filter((d) => !ids.includes(d))
+    const kept = groups.filter((g) => g.docIds.length >= 2)
+    kept.push({ id, name: String(body.name || '').trim() || `组 ${kept.length + 1}`, docIds: [...ids], createdAt: Date.now() })
+    writeGroups(kept)
+    return json({ group: kept[kept.length - 1] })
+  }
+
+  if (p === '/api/group/dissolve' && method === 'POST') {
+    const body = await bodyJson(init)
+    const groups = readGroups()
+    const g = groups.find((x) => x.id === body.id)
+    if (!g) return json({ error: '组不存在' }, 404)
+    const tree = await db.getTree('group:' + g.id)
+    for (const docId of g.docIds) await db.saveTree(docId, tree)
+    writeGroups(groups.filter((x) => x.id !== g.id))
+    return json({ ok: true })
+  }
+
   if (p === '/api/doc/restore' && method === 'POST') {
     const body = await bodyJson(init)
     await db.setHidden(body.id, false)
@@ -239,10 +303,18 @@ async function handleApi(path, init) {
     if (m && method === 'GET') {
       const doc = await db.getDoc(m[1])
       if (!doc) return json({ error: '文档不存在' }, 404)
-      return json({ doc, tree: await db.getTree(m[1]) })
+      return json({ doc, tree: await docTree(m[1]) })
     }
     if (m && method === 'DELETE') {
       await db.setHidden(m[1], true)
+      const groups = readGroups()
+      let changed = false
+      for (const g of groups) {
+        if (!g.docIds.includes(m[1])) continue
+        g.docIds = g.docIds.filter((d) => d !== m[1])
+        changed = true
+      }
+      if (changed) writeGroups(groups.filter((g) => g.docIds.length > 0))
       return json({ ok: true, hidden: true })
     }
   }
@@ -260,7 +332,7 @@ async function handleApi(path, init) {
 
   if (p === '/api/node/delete' && method === 'POST') {
     const { docId, nodeId } = await bodyJson(init)
-    const tree = await db.getTree(docId)
+    const tree = await docTree(docId)
     const kill = new Set([nodeId])
     let grew = true
     while (grew) {
@@ -273,7 +345,7 @@ async function handleApi(path, init) {
       }
     }
     for (const id of kill) delete tree.nodes[id]
-    await db.saveTree(docId, tree)
+    await saveDocTree(docId, tree)
     return json({ removed: [...kill] })
   }
 
@@ -282,7 +354,7 @@ async function handleApi(path, init) {
     if (m && method === 'GET') {
       const doc = await db.getDoc(m[1])
       if (!doc) return json({ error: '文档不存在' }, 404)
-      const md = treeToMarkdown(doc, await db.getTree(m[1]))
+      const md = treeToMarkdown(doc, await docTree(m[1]))
       return new Response(md, { headers: { 'content-type': 'text/markdown; charset=utf-8' } })
     }
   }
@@ -308,7 +380,7 @@ export function installFetchShim() {
 export async function downloadExport(docId) {
   const doc = await db.getDoc(docId)
   if (!doc) return
-  const md = treeToMarkdown(doc, await db.getTree(docId))
+  const md = treeToMarkdown(doc, await docTree(docId))
   const name = `${doc.title}-追问树.md`
   if (window.DocTreeAndroid && window.DocTreeAndroid.saveText) {
     window.DocTreeAndroid.saveText(name, md)

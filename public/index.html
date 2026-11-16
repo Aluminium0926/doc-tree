@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <meta name="theme-color" content="#0a0c11">
 <script src="/theme.js"></script>
-<link rel="stylesheet" href="/style.css?v=66">
+<link rel="stylesheet" href="/style.css?v=67">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <link id="hljs-theme" rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
 <script src="/vendor/highlight/highlight.min.js" defer></script>
@@ -26,6 +26,13 @@
       <span>＋ 导入文档</span>
     </label>
     <div class="lib-tip">支持 PDF / Word / Markdown / TXT</div>
+    <div class="group-tools"><button id="btn-group">＋ 建组（多选文档）</button></div>
+    <div id="group-bar" hidden>
+      <span id="group-bar-count">已选 0 份</span>
+      <input id="group-name" placeholder="组名（可选）" maxlength="20">
+      <button id="group-create" disabled>创建组</button>
+      <button id="group-cancel">取消</button>
+    </div>
     <div id="doc-list"></div>
     <div class="lib-foot"><span class="dot"></span>本地运行 · 数据不出本机</div>
   </aside>
@@ -82,7 +89,7 @@
   <aside id="sidebar">
     <div id="resizer-in" class="resizer resizer-in" title="拖动调节宽度 · 双击复位"></div>
     <header class="sb-head">
-      <span>追问树 <em id="node-count"></em></span>
+      <span>追问树 <em id="tree-group" class="tree-group-tag" hidden></em> <em id="node-count"></em></span>
       <div class="sb-actions">
         <button id="btn-treeview" class="icon" title="树状图"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="6" rx="1.5"/><rect x="14" y="15" width="7" height="6" rx="1.5"/><path d="M6.5 9v6.5a2 2 0 0 0 2 2H14"/></svg></button>
         <button id="btn-export" class="icon" title="导出 Markdown"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7.5 9.5 4.5 4.5 4.5-4.5"/><path d="M4 20h16"/></svg></button>
@@ -179,7 +186,7 @@
 </div>
 
 <script src="/vendor/katex/katex.min.js"></script>
-<script type="module" src="/app.js?v=66"></script>
+<script type="module" src="/app.js?v=67"></script>
 <div id="theme-pop" class="theme-pop" hidden>
   <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
   <div class="tp-seg" id="tp-mode">
