@@ -14,7 +14,7 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v71'
+const UI_VERSION = 'v72'
 const APP_VERSION = '1.0.6'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
@@ -1392,7 +1392,7 @@ async function send(forced) {
   let anchor = S.pendingAnchor
   if (!anchor && S.doc) {
     // 没选文字：锚定到当前正在看的那一页，而不是第 1 页
-    anchor = { kind: 'doc', page: S.doc.kind === 'pdf' ? currentPage() : 1, quote: '' }
+    anchor = { kind: 'doc', page: S.doc.kind === 'pdf' ? currentPage() : 1, quote: '', free: true }
     S.pendingAnchor = anchor
   }
   let q = (forced ?? $('#q').value).trim()
