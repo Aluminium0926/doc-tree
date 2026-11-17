@@ -186,11 +186,12 @@ async function handleApi(path, init) {
 
   if (p === '/api/state' && method === 'GET') {
     const groups = readGroups()
+    const flags = (() => { try { return JSON.parse(localStorage.getItem('dt:flags') || '{}') } catch { return {} } })()
     const docs = (await db.listDocs()).map((d) => ({
       ...d,
       groupId: groups.find((g) => g.docIds.includes(d.id))?.id || null
     }))
-    return json({ docs, groups, config: publicConfig() })
+    return json({ docs, groups, flags, config: publicConfig() })
   }
 
   if (p === '/api/config' && method === 'POST') {
@@ -256,6 +257,17 @@ async function handleApi(path, init) {
     await db.saveDoc(doc)
     makeSummary(doc)
     return json({ doc: { id: doc.id, title: doc.title, kind: doc.kind, pages: pages.length } })
+  }
+
+  if (p === '/api/flags' && method === 'POST') {
+    const body = await bodyJson(init)
+    let flags = {}
+    try {
+      flags = JSON.parse(localStorage.getItem('dt:flags') || '{}')
+    } catch {}
+    for (const k of ['welcomeSeen', 'guideSeen']) if (typeof body[k] === 'boolean') flags[k] = body[k]
+    localStorage.setItem('dt:flags', JSON.stringify(flags))
+    return json({ flags })
   }
 
   if (p === '/api/group' && method === 'POST') {

@@ -14,8 +14,8 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v73'
-const APP_VERSION = '1.0.7'
+const UI_VERSION = 'v74'
+const APP_VERSION = '1.0.8'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -351,30 +351,50 @@ function initUpdateCheck() {
 }
 
 function maybeWelcome() {
-  try {
-    if (localStorage.getItem('dt:seenWelcome') === '1') return
-  } catch {
-    return
-  }
   const m = $('#welcome')
   if (!m) return
-  m.hidden = false
+  const seen = S.flags?.welcomeSeen === true || localStorage.getItem('dt:seenWelcome') === '1'
+  if (seen) return
+
   const ver = $('#welcome-ver')
   if (ver) ver.textContent = `当前版本 ${UI_VERSION} · ${APP_VERSION}`
-  const ok = $('#welcome-ok')
-  const close = () => {
-    m.hidden = true
+  const start = $('#welcome-start')
+  const guide = $('#welcome-guide')
+  const showGuide = (on) => {
+    start.hidden = on
+    guide.hidden = !on
+  }
+  m.hidden = false
+  showGuide(false)
+
+  const markSeen = async (openCfg) => {
     try {
       localStorage.setItem('dt:seenWelcome', '1')
     } catch {}
-    setTimeout(() => checkUpdate(), 500)
+    try {
+      await fetch('/api/flags', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ welcomeSeen: true })
+      })
+    } catch {}
+    m.hidden = true
+    if (openCfg) {
+      openSettings()
+      setTimeout(() => $('#cfg-key')?.focus(), 260)
+    }
+    setTimeout(() => checkUpdate(), 600)
   }
-  ok.addEventListener('click', close, { once: true })
-  m.addEventListener('click', (e) => { if (e.target === m) close() }, { once: true })
+
+  $('#welcome-newbie').onclick = () => showGuide(true)
+  $('#welcome-havekey').onclick = () => markSeen(true)
+  $('#welcome-guide-back').onclick = () => showGuide(false)
+  $('#welcome-open-ds').onclick = () => window.open('https://platform.deepseek.com/api_keys', '_blank', 'noopener')
+  $('#welcome-guide-done').onclick = () => markSeen(true)
 }
+
 async function init() {
   bind()
-  maybeWelcome()
   initUpdateCheck()
 
   initTheme()
@@ -382,6 +402,7 @@ async function init() {
   setLeftCollapsed(localStorage.getItem('dt:left') === '1', false)
   await loadState()
   renderLibrary()
+  maybeWelcome()
   const qs = new URLSearchParams(location.search)
   const want = qs.get('doc') || localStorage.getItem('dt:last')
   if (want && S.docs.some((d) => d.id === want)) openDoc(want)
@@ -625,6 +646,7 @@ async function loadState() {
   const r = await fetch('/api/state').then((x) => x.json())
   S.docs = r.docs || []
   S.groups = r.groups || []
+  S.flags = r.flags || {}
   S.cfg = r.config || {}
   S.serverVersion = r.serverVersion || ''
   if (!S.cfg.hasKey) setStatus('未配置 API Key')

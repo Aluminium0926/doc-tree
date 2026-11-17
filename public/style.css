@@ -972,3 +972,26 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
   font-style: normal; font-size: 10.5px; padding: 1px 6px; border-radius: 5px;
   background: var(--accent-soft); color: var(--accent-2); margin-left: 4px;
 }
+
+
+/* ---------- 新手引导 ---------- */
+.welcome-choices { display: grid; gap: 8px; margin: 14px 0 10px; }
+.welcome-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  text-align: left; padding: 11px 13px; border-radius: 11px;
+  border: 1px solid var(--line-2); background: var(--panel);
+  color: var(--text); cursor: pointer;
+}
+.welcome-choice:hover { border-color: var(--accent); background: var(--panel-2); }
+.welcome-choice strong { font-size: 13px; }
+.welcome-choice span { font-size: 11.5px; color: var(--dim); }
+.welcome-steps { margin: 12px 0; padding-left: 20px; font-size: 12.5px; line-height: 1.85; color: var(--text); }
+.welcome-steps li { margin-bottom: 2px; }
+.welcome-steps a { color: var(--accent-2); }
+.welcome-steps code { font-size: 11.5px; padding: 1px 5px; border-radius: 4px; background: var(--panel-3); }
+
+
+#welcome-guide .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#welcome-guide .modal-actions button { white-space: nowrap; }
+#welcome-guide .modal-actions .ghost { padding: 6px 12px; }
+#welcome-guide #welcome-guide-done { grid-column: 1 / -1; }

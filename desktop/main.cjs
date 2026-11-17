@@ -46,6 +46,14 @@ process.on('unhandledRejection', (e) => {
   log('UNHANDLED ' + ((e && e.stack) || e))
 })
 
+function portFree(port) {
+  return new Promise((resolve) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve(false))
+    srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)))
+  })
+}
+
 function freePort() {
   return new Promise((resolve) => {
     const srv = net.createServer()
@@ -208,7 +216,10 @@ async function boot() {
     }
   }
 
-  serverPort = await freePort()
+  // 固定端口：保证 http://127.0.0.1:<port> 这个 origin 稳定，
+  // 否则每次启动都换端口，localStorage（欢迎页、缩放、跳过版本等）全部丢失
+  serverPort = 43171
+  if (!(await portFree(serverPort))) serverPort = await freePort()
   process.env.DOCTREE_DATA = dataDir
   process.env.PORT = String(serverPort)
   log('importing server on ' + serverPort)

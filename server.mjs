@@ -89,7 +89,7 @@ async function handleApi(req, res, url) {
   const p = url.pathname
 
   if (p === '/api/state' && req.method === 'GET') {
-    return json(res, 200, { docs: await store.listDocs(), groups: await store.listGroups(), config: llm.publicConfig(), serverVersion: SERVER_VERSION })
+    return json(res, 200, { docs: await store.listDocs(), groups: await store.listGroups(), flags: await store.getFlags(), config: llm.publicConfig(), serverVersion: SERVER_VERSION })
   }
 
   if (p === '/api/config' && req.method === 'POST') {
@@ -189,7 +189,15 @@ async function handleApi(req, res, url) {
     }
   }
 
-if (p === '/api/group' && req.method === 'POST') {
+if (p === '/api/flags' && req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
+    const patch = {}
+    for (const k of ['welcomeSeen', 'guideSeen']) if (typeof body[k] === 'boolean') patch[k] = body[k]
+    const flags = await store.setFlags(patch)
+    return json(res, 200, { flags })
+  }
+
+  if (p === '/api/group' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req) || '{}')
     const ids = Array.isArray(body.docIds) ? body.docIds.filter(Boolean).slice(0, 50) : []
     if (ids.length < 2) return json(res, 400, { error: '至少选择两份文档' })
