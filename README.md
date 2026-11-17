@@ -20,7 +20,7 @@
 | **安卓** | 下载 `android-v1.0.7` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
 | **鸿蒙 NEXT** | 用系统自带的**卓易通**安装同一个 APK；不装就用上面的网页版 | 卓易通提供安卓运行时，装完 APK 可当普通 App 用 |
 | **Windows** | 下载 `DocTree-1.0.8-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
-| **macOS** | 网页版开箱可用；原生 `.app` 用 `bash scripts/build-macos.sh` 在 Mac 上构建 | 未公证，首次需右键「打开」 |
+| **macOS** | 下载 `mac-arm64-v1.0.5` / `mac-x64-v1.0.5` 里的 zip，解压后双击 `首次打开.command` | 未公证，首次需右键「打开」 |
 | 开发者 | `npm install && npm start` | 起本地服务端，`HOST=0.0.0.0` 可让局域网手机访问 |
 
 ### 网页版最省事
