@@ -267,6 +267,36 @@ export async function streamChat(messages, onDelta, { signal, model, onReasoning
 }
 
 // ---------- 工具调用 ----------
+
+function stripDSML(s) {
+  return String(s || '')
+    .replace(/^\s+/, '')
+    .replace(/<[^>]*?invoke[^>]*?name\s*=\s*"[^"]*"[^>]*>[\s\S]*?<\/[^>]*?invoke\s*>/gi, '')
+    .replace(/<[^>]*?DSML[^>]*>/gi, '')
+    .replace(/<\/[^>]*?DSML[^>]*>/gi, '')
+    .replace(/<\/?[^>]*?parameter[^>]*>/gi, '')
+}
+
+function visibleDSML(s) {
+  const src = String(s || '')
+  const at = src.search(/<\s*[|｜]\s*[|｜]\s*DSML/i)
+  const head = at >= 0 ? src.slice(0, at) : src
+  return stripDSML(head)
+}
+
+function parseDSMLCalls(s) {
+  const calls = []
+  const re = /<[^>]*?invoke[^>]*?name\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/[^>]*?invoke\s*>/gi
+  for (const m of String(s || '').matchAll(re)) {
+    const input = {}
+    const pre = /<[^>]*?parameter[^>]*?name\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/[^>]*?parameter\s*>/gi
+    for (const p of m[2].matchAll(pre)) input[p[1]] = p[2].trim()
+    if (!Object.keys(input).length && m[2].trim()) input._raw = m[2].trim()
+    calls.push({ name: m[1], arguments: JSON.stringify(input) })
+  }
+  return calls
+}
+
 function parseToolArgs(s) {
   try {
     return JSON.parse(s || '{}')
@@ -298,7 +328,15 @@ async function openaiToolRound(cfg, messages, tools, { signal, onDelta, onReason
   const dec = new TextDecoder()
   let buf = ''
   let text = ''
+  let shown = ''
   const calls = []
+  const emit = (full) => {
+    const vis = visibleDSML(full)
+    if (vis.length > shown.length) {
+      onDelta(vis.slice(shown.length))
+      shown = vis
+    }
+  }
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
@@ -317,7 +355,7 @@ async function openaiToolRound(cfg, messages, tools, { signal, onDelta, onReason
         if (delta.reasoning_content && onReasoning) onReasoning(delta.reasoning_content)
         if (delta.content) {
           text += delta.content
-          onDelta(delta.content)
+          emit(text)
         }
         for (const tc of delta.tool_calls || []) {
           const i = tc.index ?? 0
@@ -329,7 +367,9 @@ async function openaiToolRound(cfg, messages, tools, { signal, onDelta, onReason
       } catch {}
     }
   }
-  return { text, calls: calls.filter(Boolean) }
+  const dsml = parseDSMLCalls(text)
+  const allCalls = [...calls.filter(Boolean), ...dsml]
+  return { text: stripDSML(text), calls: allCalls }
 }
 
 async function anthropicToolRound(cfg, messages, tools, { signal, onDelta, onReasoning, model, provider }) {
