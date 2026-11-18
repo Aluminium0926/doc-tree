@@ -121,7 +121,7 @@ async function handleAsk(init) {
     send({ type: 'meta', node })
     try {
       const messages = buildAskMessages({ docs, tree, node, image: body.image })
-      await streamChatWithTools(
+      const usage = await streamChatWithTools(
         messages,
         (d) => {
           node.answer += d
@@ -132,12 +132,17 @@ async function handleAsk(init) {
           provider,
           specs: TOOL_SPECS,
           exec: (name, args) => execTool(docs, doc.id, name, args),
+          onTool: (t) => send({ type: 'tool', name: t.name, args: t.args }),
           onReasoning: (t) => {
             node.reasoning = (node.reasoning || '') + t
             send({ type: 'reasoning', text: t })
           }
         }
       )
+      if (usage) {
+        node.usage = usage
+        send({ type: 'usage', usage })
+      }
     } catch (e) {
       node.error = String(e.message || e)
       send({ type: 'error', message: node.error })
@@ -192,6 +197,59 @@ async function handleApi(path, init) {
       groupId: groups.find((g) => g.docIds.includes(d.id))?.id || null
     }))
     return json({ docs, groups, flags, config: publicConfig() })
+  }
+
+  if (p === '/api/usage' && method === 'GET') {
+    const docs = await db.listDocsRaw()
+    const groups = readGroups()
+    const groupName = new Map(groups.map((g) => [g.id, g.name]))
+    const seen = new Set()
+    const totals = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0, total: 0, requests: 0, rounds: 0 }
+    const dayMap = new Map()
+    const docMap = new Map()
+    const dayKey = (t2) => {
+      const d = new Date(t2)
+      const p2 = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+    }
+    for (const doc of docs) {
+      const key = doc.groupId || doc.id
+      if (seen.has(key)) continue
+      seen.add(key)
+      const tree = await docTree(doc.id)
+      for (const n of Object.values(tree.nodes || {})) {
+        const u = n.usage
+        if (!u) continue
+        totals.input += u.input || 0
+        totals.output += u.output || 0
+        totals.cacheHit += u.cacheHit || 0
+        totals.cacheMiss += u.cacheMiss || 0
+        totals.total += u.total || (u.input || 0) + (u.output || 0)
+        totals.requests += 1
+        totals.rounds += u.rounds || 1
+        const dk = dayKey(n.createdAt || Date.now())
+        if (!dayMap.has(dk)) dayMap.set(dk, { date: dk, input: 0, output: 0, cacheHit: 0, cacheMiss: 0, total: 0, requests: 0 })
+        const dd = dayMap.get(dk)
+        dd.input += u.input || 0
+        dd.output += u.output || 0
+        dd.cacheHit += u.cacheHit || 0
+        dd.cacheMiss += u.cacheMiss || 0
+        dd.total += u.total || (u.input || 0) + (u.output || 0)
+        dd.requests += 1
+        if (!docMap.has(key)) docMap.set(key, { title: doc.groupId ? groupName.get(doc.groupId) || doc.title : doc.title, total: 0, cacheHit: 0, cacheMiss: 0, requests: 0 })
+        const dm = docMap.get(key)
+        dm.total += u.total || (u.input || 0) + (u.output || 0)
+        dm.cacheHit += u.cacheHit || 0
+        dm.cacheMiss += u.cacheMiss || 0
+        dm.requests += 1
+      }
+    }
+    const hitRate = totals.cacheHit + totals.cacheMiss > 0 ? totals.cacheHit / (totals.cacheHit + totals.cacheMiss) : 0
+    return json({
+      totals: { ...totals, hitRate },
+      days: [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-14),
+      docs: [...docMap.values()].sort((a, b) => b.total - a.total).slice(0, 8)
+    })
   }
 
   if (p === '/api/config' && method === 'POST') {
@@ -289,6 +347,37 @@ async function handleApi(path, init) {
     return json({ group: kept[kept.length - 1] })
   }
 
+  if (p === '/api/group/update' && method === 'POST') {
+    const body = await bodyJson(init)
+    const groups = readGroups()
+    const g = groups.find((x) => x.id === body.id)
+    const add = Array.isArray(body.add) ? body.add.filter(Boolean) : []
+    const remove = Array.isArray(body.remove) ? body.remove.filter(Boolean) : []
+    if (!g) return json({ group: null, dissolved: true })
+    if (typeof body.name === 'string' && body.name.trim()) g.name = body.name.trim()
+    const tree = await db.getTree('group:' + g.id)
+    for (const docId of remove) {
+      await db.saveTree(docId, tree)
+    }
+    g.docIds = g.docIds.filter((d) => !remove.includes(d))
+    for (const docId of add) {
+      const own = await db.getTree(docId)
+      Object.assign(tree.nodes, own.nodes || {})
+      for (const other of groups) if (other.id !== g.id) other.docIds = other.docIds.filter((d) => d !== docId)
+      if (!g.docIds.includes(docId)) g.docIds.push(docId)
+    }
+    await db.saveTree('group:' + g.id, tree)
+    // 少于 2 份自动解散
+    for (const x of [...groups]) {
+      if (x.docIds.length >= 2) continue
+      const tx = await db.getTree('group:' + x.id)
+      for (const docId of x.docIds) await db.saveTree(docId, tx)
+      groups.splice(groups.indexOf(x), 1)
+    }
+    writeGroups(groups)
+    return json({ group: groups.find((x) => x.id === g.id) || null, dissolved: !groups.some((x) => x.id === g.id) })
+  }
+
   if (p === '/api/group/dissolve' && method === 'POST') {
     const body = await bodyJson(init)
     const groups = readGroups()
@@ -331,6 +420,111 @@ async function handleApi(path, init) {
       if (changed) writeGroups(groups.filter((g) => g.docIds.length > 0))
       return json({ ok: true, hidden: true })
     }
+  }
+
+  if (p === '/api/instruction/remove' && method === 'POST') {
+    const body = await bodyJson(init)
+    const doc = await db.getDoc(body.docId)
+    if (!doc) return json({ error: '文档不存在' }, 404)
+    if (body.clear) doc.instructions = []
+    else {
+      const list = Array.isArray(doc.instructions) ? doc.instructions : []
+      const i = Number(body.index)
+      if (Number.isInteger(i) && i >= 0 && i < list.length) list.splice(i, 1)
+      doc.instructions = list
+    }
+    await db.saveDoc(doc)
+    return json({ ok: true, count: doc.instructions.length, instructions: doc.instructions })
+  }
+
+  if (p === '/api/instruction' && method === 'POST') {
+    const body = await bodyJson(init)
+    const doc = await db.getDoc(body.docId)
+    if (!doc) return json({ error: '文档不存在' }, 404)
+    const text = String(body.text || '').trim().slice(0, 500)
+    if (!text) return json({ error: '指令不能为空' }, 400)
+    if (/^(清除|清空).*指令$/.test(text)) {
+      doc.instructions = []
+      await db.saveDoc(doc)
+      return json({ ok: true, count: 0, reply: '已清除所有指令' })
+    }
+    const cfg = readConfig()
+    if (!cfg.apiKey) return json({ error: '未配置 API Key' }, 400)
+    let reply = ''
+    try {
+      const s = await chat(
+        [
+          { role: 'system', content: '你是「文档树」的指令接收器。用户会给出关于后续回答方式的指令。只回复一句简短确认（不超过 20 字），不要解释、不要重复指令。' },
+          { role: 'user', content: text }
+        ],
+        { maxTokens: 60 }
+      )
+      reply = String(s || '').trim().slice(0, 60)
+    } catch {}
+    doc.instructions = [...(doc.instructions || []), text].slice(-20)
+    await db.saveDoc(doc)
+    return json({ ok: true, count: doc.instructions.length, reply })
+  }
+
+  if (p === '/api/ask/resume' && method === 'POST') {
+    const body = await bodyJson(init)
+    const doc = await db.getDoc(body.docId)
+    if (!doc) return json({ error: '文档不存在' }, 404)
+    const cfg = readConfig()
+    if (!cfg.apiKey) return json({ error: '未配置 API Key' }, 400)
+    const group = groupOfDoc(doc.id)
+    let docs = [doc]
+    if (group) docs = (await Promise.all(group.docIds.map((id) => db.getDoc(id)))).filter(Boolean)
+    const tree = await docTree(body.docId)
+    const node = tree.nodes[body.nodeId]
+    if (!node) return json({ error: '这条回答不存在' }, 404)
+
+    const messages = buildAskMessages({ docs, tree, node })
+    messages.push({ role: 'assistant', content: node.answer || '（还没有任何内容）' })
+    messages.push({ role: 'user', content: '（上面的回答被中断了。请从断点处继续写，不要重复已有内容，也不要重新开头。）' })
+
+    return sseResponse(async (send) => {
+      send({ type: 'meta', node })
+      try {
+        const usage = await streamChatWithTools(
+          messages,
+          (d) => {
+            node.answer += d
+            send({ type: 'delta', text: d })
+          },
+          {
+            model: node.model || cfg.model,
+            specs: TOOL_SPECS,
+            exec: (name, args) => execTool(docs, doc.id, name, args),
+            onTool: (t2) => send({ type: 'tool', name: t2.name, args: t2.args }),
+            onReasoning: (t2) => {
+              node.reasoning = (node.reasoning || '') + t2
+              send({ type: 'reasoning', text: t2 })
+            }
+          }
+        )
+        if (usage) {
+          const prev = node.usage || {}
+          node.usage = {
+            input: (prev.input || 0) + usage.input,
+            output: (prev.output || 0) + usage.output,
+            cacheHit: (prev.cacheHit || 0) + usage.cacheHit,
+            cacheMiss: (prev.cacheMiss || 0) + usage.cacheMiss,
+            total: (prev.total || 0) + usage.total,
+            rounds: (prev.rounds || 0) + (usage.rounds || 1)
+          }
+          send({ type: 'usage', usage: node.usage })
+        }
+        delete node.stopped
+      } catch (e) {
+        node.stopped = true
+        send({ type: 'stopped' })
+      }
+      if (node.reasoning) node.reasoning = node.reasoning.slice(0, 6000)
+      delete node.status
+      await saveDocTree(body.docId, tree)
+      send({ type: 'done', node })
+    })
   }
 
   if (p === '/api/ask' && method === 'POST') return handleAsk(init)

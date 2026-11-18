@@ -14,8 +14,8 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v75'
-const APP_VERSION = '1.0.9'
+const UI_VERSION = 'v100'
+const APP_VERSION = '1.0.10'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -198,6 +198,9 @@ const S = {
   cfg: null,
   docs: [],
   groups: [],
+  groupTarget: null,
+  instrMode: false,
+  abort: null,
   selecting: false,
   selected: new Set(),
   collapsedGroups: new Set(JSON.parse(localStorage.getItem('dt:collapsedGroups') || '[]')),
@@ -695,7 +698,7 @@ function docRow(d, inGroup) {
   const check = S.selecting && !inGroup ? `<span class="doc-check${S.selected.has(d.id) ? ' on' : ''}"></span>` : ''
   el.innerHTML = `${check}<span class="doc-ico" data-kind="${esc(d.kind)}">${esc((d.kind || '?').toUpperCase())}</span>
     <span class="t" title="${esc(d.title)}">${esc(d.title)}</span>
-    ${S.selecting ? '' : '<button class="x" title="移出列表（保留提问树）">✕</button>'}`
+    ${S.selecting ? '' : (inGroup ? '<button class="ungroup" title="移出组（提问树留给这份文档）">移出</button>' : '') + '<button class="x" title="移出列表（保留提问树）">✕</button>'}`
   el.addEventListener('click', (e) => {
     if (e.target.closest('button')) return
     if (S.selecting && !inGroup) {
@@ -706,6 +709,20 @@ function docRow(d, inGroup) {
       return
     }
     openDoc(d.id)
+  })
+  el.querySelector('.ungroup')?.addEventListener('click', async (e) => {
+    e.stopPropagation()
+    const g = (S.groups || []).find((x) => x.docIds.includes(d.id))
+    if (!g) return
+    const r = await fetch('/api/group/update', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: g.id, remove: [d.id] })
+    })
+    const j = await r.json().catch(() => ({}))
+    await loadState()
+    renderLibrary()
+    toast(j.dissolved ? '组只剩 1 份，已自动解散，提问树已保留' : `已把《${d.title}》移出组`)
   })
   el.querySelector('.x')?.addEventListener('click', async (e) => {
     e.stopPropagation()
@@ -729,6 +746,21 @@ function renderLibrary() {
     return
   }
   const groups = S.groups || []
+
+  // 正在为某个组挑选文档：平铺所有候选（含其他组里的）
+  if (S.groupTarget) {
+    const g = groups.find((x) => x.id === S.groupTarget)
+    const head = document.createElement('div')
+    head.className = 'lib-sel-head'
+    head.textContent = `选择要加入「${g ? g.name : '组'}」的文档`
+    box.appendChild(head)
+    for (const d of visible) {
+      if (g && g.docIds.includes(d.id)) continue
+      box.appendChild(docRow(d, false))
+    }
+    return
+  }
+
   const groupedIds = new Set(groups.flatMap((g) => g.docIds))
   const rootDocs = visible.filter((d) => !groupedIds.has(d.id))
 
@@ -738,13 +770,50 @@ function renderLibrary() {
     const open = !S.collapsedGroups.has(g.id)
     const row = document.createElement('div')
     row.className = 'doc-group'
-    row.innerHTML = `<span class="g-chev">${open ? '▾' : '▸'}</span><span class="g-name" title="${esc(g.name)}">${esc(g.name)}</span><em class="g-count">${members.length}</em><button class="g-x" title="解散组">✕</button>`
+    row.innerHTML = `<span class="g-chev">${open ? '▾' : '▸'}</span><span class="g-name" title="${esc(g.name)}">${esc(g.name)}</span><em class="g-count">${members.length}</em><button class="g-add" title="移入文档">＋</button><button class="g-x" title="解散组">✕</button>`
     row.addEventListener('click', (e) => {
-      if (e.target.closest('.g-x')) return
+      if (e.target.closest('.g-x') || e.target.closest('.g-add')) return
       if (S.collapsedGroups.has(g.id)) S.collapsedGroups.delete(g.id)
       else S.collapsedGroups.add(g.id)
       localStorage.setItem('dt:collapsedGroups', JSON.stringify([...S.collapsedGroups]))
       renderLibrary()
+    })
+    row.querySelector('.g-name').addEventListener('dblclick', (e) => {
+      e.stopPropagation()
+      const input = document.createElement('input')
+      input.className = 'g-rename'
+      input.value = g.name
+      input.maxLength = 24
+      const nameEl = row.querySelector('.g-name')
+      nameEl.replaceWith(input)
+      input.focus()
+      input.select()
+      let done = false
+      const finish = async (save) => {
+        if (done) return
+        done = true
+        const val = input.value.trim()
+        if (save && val && val !== g.name) {
+          await fetch('/api/group/update', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: g.id, name: val })
+          })
+          await loadState()
+        }
+        renderLibrary()
+      }
+      input.addEventListener('keydown', (ev) => {
+        ev.stopPropagation()
+        if (ev.key === 'Enter') finish(true)
+        else if (ev.key === 'Escape') finish(false)
+      })
+      input.addEventListener('blur', () => finish(true))
+      input.addEventListener('click', (ev) => ev.stopPropagation())
+    })
+    row.querySelector('.g-add').addEventListener('click', (e) => {
+      e.stopPropagation()
+      startSelecting(g.id)
     })
     row.querySelector('.g-x').addEventListener('click', async (e) => {
       e.stopPropagation()
@@ -761,11 +830,18 @@ function renderLibrary() {
   for (const d of rootDocs) box.appendChild(docRow(d, false))
 
   if (hidden.length) {
+    const collapsed = localStorage.getItem('dt:archCollapsed') === '1'
     const head = document.createElement('div')
     head.className = 'doc-arch-head'
-    head.textContent = `已移除（${hidden.length}）`
+    head.innerHTML = `<span>已移除（${hidden.length}）</span><span class="arch-chev">${collapsed ? '▸' : '▾'}</span>`
+    head.title = collapsed ? '展开已移除的文档' : '折叠已移除的文档'
+    head.addEventListener('click', () => {
+      const next = localStorage.getItem('dt:archCollapsed') === '1' ? '0' : '1'
+      localStorage.setItem('dt:archCollapsed', next)
+      renderLibrary()
+    })
     box.appendChild(head)
-    for (const d of hidden) {
+    for (const d of collapsed ? [] : hidden) {
       const el = document.createElement('div')
       el.className = 'doc-item archived'
       el.dataset.id = d.id
@@ -796,14 +872,19 @@ function updateGroupBar() {
   const c = $('#group-bar-count')
   if (c) c.textContent = `已选 ${n} 份`
   const btn = $('#group-create')
-  if (btn) btn.disabled = n < 2
+  if (btn) btn.disabled = n < (S.groupTarget ? 1 : 2)
 }
 
-function startSelecting() {
+function startSelecting(targetId = null) {
   S.selecting = true
+  S.groupTarget = targetId || null
   S.selected = new Set()
   const bar = $('#group-bar')
   if (bar) bar.hidden = false
+  const nameInput = $('#group-name')
+  if (nameInput) nameInput.hidden = Boolean(targetId)
+  const createBtn = $('#group-create')
+  if (createBtn) createBtn.textContent = targetId ? '加入组' : '创建组'
   $('#btn-group')?.classList.add('on')
   updateGroupBar()
   renderLibrary()
@@ -811,15 +892,36 @@ function startSelecting() {
 
 function cancelSelecting() {
   S.selecting = false
+  S.groupTarget = null
   S.selected = new Set()
   const bar = $('#group-bar')
   if (bar) bar.hidden = true
+  const nameInput = $('#group-name')
+  if (nameInput) nameInput.hidden = false
+  const createBtn = $('#group-create')
+  if (createBtn) createBtn.textContent = '创建组'
   $('#btn-group')?.classList.remove('on')
   renderLibrary()
 }
 
 async function createGroupFromSelection() {
   const ids = [...S.selected]
+  if (!ids.length) return toast('先选文档')
+  const target = S.groupTarget
+  if (target) {
+    const r = await fetch('/api/group/update', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: target, add: ids })
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) return toast(j.error || '加入失败')
+    cancelSelecting()
+    await loadState()
+    renderLibrary()
+    toast(j.dissolved ? '组已解散' : `已加入 ${ids.length} 份文档`)
+    return
+  }
   if (ids.length < 2) return toast('至少选两份文档')
   const name = ($('#group-name')?.value || '').trim() || `组 ${(S.groups || []).length + 1}`
   const r = await fetch('/api/group', {
@@ -861,6 +963,79 @@ async function importFiles(files) {
 }
 
 /* ================= 打开文档 ================= */
+function renderDocMeta() {
+  const el = $('#doc-meta')
+  if (!el) return
+  if (!S.doc) {
+    el.textContent = ''
+    return
+  }
+  const base =
+    S.doc.kind === 'pdf'
+      ? `${S.doc.pages.length} 页 · PDF`
+      : `${(S.doc.kind || '').toUpperCase()} · ${(S.doc.pages?.[0]?.text || '').length.toLocaleString()} 字`
+  const n = (S.doc.instructions || []).length
+  el.innerHTML = esc(base) + (n ? ` · <span class="meta-instr">指令 ${n}</span>` : '')
+}
+
+function closeInstrPop() {
+  const pop = $('#instr-pop')
+  if (pop) pop.hidden = true
+}
+
+function openInstrPop() {
+  if (!S.doc) return
+  const list = S.doc.instructions || []
+  const pop = $('#instr-pop')
+  const box = $('#instr-list')
+  if (!pop || !box || !list.length) return
+  box.innerHTML = ''
+  list.forEach((text, i) => {
+    const row = document.createElement('div')
+    row.className = 'instr-item'
+    const span = document.createElement('span')
+    span.textContent = text
+    const del = document.createElement('button')
+    del.title = '删除这条指令'
+    del.textContent = '✕'
+    del.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const r = await fetch('/api/instruction/remove', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ docId: S.doc.id, index: i })
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) return toast(j.error || '删除失败', 'error')
+      S.doc.instructions = j.instructions || []
+      renderDocMeta()
+      if (S.doc.instructions.length) openInstrPop()
+      else closeInstrPop()
+    })
+    row.append(span, del)
+    box.appendChild(row)
+  })
+  pop.hidden = false
+  const r = $('#doc-meta').getBoundingClientRect()
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + 'px'
+  pop.style.top = Math.min(r.bottom + 6, window.innerHeight - pop.offsetHeight - 12) + 'px'
+}
+
+async function clearInstructions() {
+  if (!S.doc) return
+  const r = await fetch('/api/instruction/remove', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ docId: S.doc.id, clear: true })
+  })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) return toast(j.error || '清空失败', 'error')
+  S.doc.instructions = []
+  renderDocMeta()
+  closeInstrPop()
+  toast('已清除所有指令')
+}
+
 function resetViewer() {
   zoomPreviewZ = null
   const _pv = document.getElementById('pages')
@@ -894,10 +1069,7 @@ async function openDoc(id) {
   S.collapsed.clear()
   localStorage.setItem('dt:last', id)
   $('#doc-title').textContent = S.doc.title
-  $('#doc-meta').textContent =
-    S.doc.kind === 'pdf'
-      ? `${S.doc.pages.length} 页 · PDF`
-      : `${(S.doc.kind || '').toUpperCase()} · ${(S.doc.pages?.[0]?.text || '').length.toLocaleString()} 字`
+  renderDocMeta()
   $('#hint').hidden = true
   renderLibrary()
   renderTree()
@@ -933,12 +1105,28 @@ async function renderPdf() {
     const r = el.getBoundingClientRect()
     return r.bottom > root.top - pad && r.top < root.bottom + pad
   }
+  const drawOne = async (el) => {
+    try {
+      await drawPage(+el.dataset.page, el)
+      el.dataset.drawn = '1'
+    } catch (e) {
+      console.warn('[draw]', el.dataset.page, e && e.message)
+      el.dataset.drawn = '0'
+      // 失败了重新挂回观察区，稍后再试，避免永久空白
+      setTimeout(() => {
+        try {
+          io.observe(el)
+        } catch {}
+        scheduleHeal(300)
+      }, 300)
+    }
+  }
   const io = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
         if (!e.isIntersecting || !nearView(e.target)) continue
         io.unobserve(e.target)
-        drawPage(+e.target.dataset.page, e.target)
+        drawOne(e.target)
       }
     },
     { root: scroller, rootMargin: '900px 0px' }
@@ -958,7 +1146,7 @@ async function renderPdf() {
       pages.appendChild(el)
       if (n <= 3) {
         try {
-          await drawPage(n, el, page)
+          await drawOne(el)
         } catch (e) {
           console.warn('[draw]', n, e?.message)
           io.observe(el) // 失败了留着观察位，滚动时再试
@@ -980,6 +1168,7 @@ async function renderPdf() {
 async function drawPage(n, el, page) {
   page ??= await S.pdf.getPage(n)
   const canvas = el.querySelector('canvas')
+  el.dataset.drawn = '0'
 
   // 同一块 canvas 上有未完成的渲染时，先取消并等它结束，避免并发报错
   const prev = renderTasks.get(canvas)
@@ -1013,6 +1202,7 @@ async function drawPage(n, el, page) {
     if (renderTasks.get(canvas) === task) renderTasks.delete(canvas)
   }
   await buildTextLayer(page, viewport, el.querySelector('.textLayer'))
+  el.dataset.drawn = '1'
 }
 
 async function buildTextLayer(page, viewport, layer) {
@@ -1102,23 +1292,29 @@ async function healBlankPages(force = false) {
   healing = true
   try {
     let n = 0
+    let left = 0
     for (const el of document.querySelectorAll('.page')) {
-      if (n >= 6) break
       const canvas = el.querySelector('canvas')
       if (!canvas) continue
       const r = el.getBoundingClientRect()
-      if (r.bottom < root.top - 300 || r.top > root.bottom + 300) continue
-      const undrawn = canvas.width === 300
-      // force：回来就整页重画；否则只补坏掉/没画过的
-      if (!force && !undrawn && !canvasBlank(canvas)) continue
-      n++
-      try {
-        await drawPage(+el.dataset.page, el)
-      } catch (e) {
-        console.warn('[heal]', el.dataset.page, e && e.message)
+      const visible = r.bottom > root.top - 600 && r.top < root.bottom + 600
+      if (!visible) continue
+      const undrawn = el.dataset.drawn !== '1'
+      if (force || undrawn || canvasBlank(canvas)) {
+        if (n < 12) {
+          n++
+          try {
+            await drawPage(+el.dataset.page, el)
+          } catch (e) {
+            console.warn('[heal]', el.dataset.page, e && e.message)
+          }
+        } else {
+          left++
+        }
       }
     }
     if (n) renderHighlights()
+    if (left) scheduleHeal(300)
   } finally {
     healing = false
   }
@@ -1216,7 +1412,13 @@ function markDocSelection(range, startEl, sel) {
 function markAnswerSelection(range, startEl, sel) {
   const card = startEl.closest('.node')
   if (!card) return hideFloat()
-  S.pendingAnchor = { kind: 'answer', nodeId: card.dataset.id, quote: sel.toString().trim() }
+  const parentNode = S.tree?.nodes?.[card.dataset.id]
+  S.pendingAnchor = {
+    kind: 'answer',
+    nodeId: card.dataset.id,
+    quote: sel.toString().trim(),
+    page: parentNode?.anchor?.page || currentPage()
+  }
   S.pendingParent = card.dataset.id
   updateChip()
   showFloat(range, [{ label: '追问这段', primary: true, act: 'ask' }])
@@ -1341,10 +1543,11 @@ function nodeEl(n, depth, kids) {
 
   const acts = document.createElement('div')
   acts.className = 'node-actions'
-  acts.innerHTML = `<button data-act="again">追问</button><button data-act="copy">复制</button><button data-act="del">删除</button>`
+  acts.innerHTML = (n.stopped ? '<button data-act="resume">继续</button>' : '') + `<button data-act="again">追问</button><button data-act="copy">复制</button><button data-act="del">删除</button>`
+  acts.querySelector('[data-act="resume"]')?.addEventListener('click', () => resumeNode(n.id))
   acts.querySelector('[data-act="again"]').addEventListener('click', () => {
     S.pendingParent = n.id
-    S.pendingAnchor = { kind: 'answer', nodeId: n.id, quote: '' }
+    S.pendingAnchor = { kind: 'answer', nodeId: n.id, quote: '', page: n.anchor?.page || currentPage() }
     updateChip()
     $('#q').focus()
   })
@@ -1352,6 +1555,11 @@ function nodeEl(n, depth, kids) {
     await navigator.clipboard.writeText(n.answer || '')
     toast('已复制')
   })
+  const usageEl = document.createElement('div')
+  usageEl.className = 'node-usage'
+  usageEl.textContent = usageLine(n.usage)
+  usageEl.hidden = !usageEl.textContent
+  card.appendChild(usageEl)
   acts.querySelector('[data-act="del"]').addEventListener('click', async () => {
     if (!confirm('删除这条追问及其子分支？')) return
     await fetch('/api/node/delete', {
@@ -1408,9 +1616,55 @@ function locate(anchor) {
 }
 
 /* ================= 提问 ================= */
+function setInstrMode(on) {
+  S.instrMode = Boolean(on)
+  const btn = $('#btn-instr')
+  if (btn) btn.classList.toggle('on', S.instrMode)
+  const q = $('#q')
+  if (q) {
+    q.placeholder = S.instrMode
+      ? '输入指令，例如：以后用英文回答 / 少用公式 / 只讲结论'
+      : '选中文字后点「发送」提问，留空也行'
+    q.focus()
+  }
+}
+
+async function sendInstruction(text) {
+  if (!S.doc) return toast('先打开一份文档')
+  setStatus('指令发送中…')
+  try {
+    const r = await fetch('/api/instruction', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ docId: S.doc.id, text })
+    })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(j.error || '指令发送失败')
+    $('#q').value = ''
+    setInstrMode(false)
+    toast(j.count === 0 ? '已清除所有指令' : j.reply ? `指令已生效：${j.reply}` : '指令已生效')
+    // 当前打开文档的指令数要立刻反映到标题下面，不用重新打开
+    if (S.doc) {
+      S.doc.instructions = j.count === 0 ? [] : [...(S.doc.instructions || []), text]
+      renderDocMeta()
+    }
+    await loadState()
+    renderLibrary()
+  } catch (e) {
+    toast(String(e.message || e))
+  } finally {
+    setStatus('')
+  }
+}
+
 async function send(forced) {
   if (!S.doc) return toast('先打开一份文档')
   if (S.busy) return
+  if (S.instrMode) {
+    const text = String(forced ?? $('#q').value).trim()
+    if (!text) return toast('先输入一条指令')
+    return sendInstruction(text)
+  }
   let anchor = S.pendingAnchor
   if (!anchor && S.doc) {
     // 没选文字：锚定到当前正在看的那一页，而不是第 1 页
@@ -1433,13 +1687,17 @@ async function send(forced) {
 
   S.busy = true
   $('#btn-send').disabled = true
+  $('#btn-stop').hidden = false
   setStatus('思考中…')
+  const ac = new AbortController()
+  S.abort = ac
 
   try {
     const res = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ docId: S.doc.id, parentId, anchor, question: q, image })
+      body: JSON.stringify({ docId: S.doc.id, parentId, anchor, question: q, image }),
+      signal: ac.signal
     })
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
@@ -1452,11 +1710,64 @@ async function send(forced) {
     updateChip()
     await consumeStream(res)
   } catch (e) {
-    toast(e.message)
-    setStatus('')
+    if (e && e.name === 'AbortError') {
+      setStatus('已停止')
+      // 服务端要先把 stopped 标记落盘，晚一点再拉一次树
+      setTimeout(refreshCurrentTree, 700)
+    } else {
+      toast(e.message)
+      setStatus('')
+    }
   } finally {
+    S.abort = null
     S.busy = false
     $('#btn-send').disabled = false
+    $('#btn-stop').hidden = true
+  }
+}
+
+async function refreshCurrentTree() {
+  if (!S.doc) return
+  try {
+    const d = await fetch('/api/doc/' + S.doc.id).then((r) => r.json())
+    if (d && d.tree) {
+      S.tree = d.tree
+      renderTree()
+    }
+  } catch {}
+}
+
+async function resumeNode(id) {
+  if (!S.doc || S.busy) return
+  S.busy = true
+  $('#btn-send').disabled = true
+  $('#btn-stop').hidden = false
+  setStatus('继续生成…')
+  const ac = new AbortController()
+  S.abort = ac
+  try {
+    const res = await fetch('/api/ask/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ docId: S.doc.id, nodeId: id }),
+      signal: ac.signal
+    })
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      throw new Error(j.error || `请求失败 ${res.status}`)
+    }
+    await consumeStream(res)
+  } catch (e) {
+    if (e && e.name === 'AbortError') setStatus('已停止')
+    else {
+      toast(e.message)
+      setStatus('')
+    }
+  } finally {
+    S.abort = null
+    S.busy = false
+    $('#btn-send').disabled = false
+    $('#btn-stop').hidden = true
   }
 }
 
@@ -1493,6 +1804,27 @@ async function consumeStream(res) {
       const el = document.querySelector(`.node[data-id="${node.id}"] .answer`)
       if (el) el.textContent = node.answer
       setStatus('生成中…')
+    } else if (ev.type === 'usage' && node) {
+      node.usage = ev.usage
+      const card = document.querySelector(`.node[data-id="${node.id}"]`)
+      const el = card?.querySelector('.node-usage')
+      if (el) {
+        el.textContent = usageLine(node.usage)
+        el.hidden = !el.textContent
+      }
+    } else if (ev.type === 'tool') {
+      const args = ev.args || {}
+      const label =
+        ev.name === 'read_page'
+          ? `正在读第 ${args.page} 页…`
+          : ev.name === 'read_pages'
+            ? `正在读第 ${args.from}–${args.to} 页…`
+          : ev.name === 'search_docs'
+            ? `正在检索「${args.query || ''}」…`
+            : '正在查看文档…'
+      setStatus(label)
+    } else if (ev.type === 'stopped') {
+      setStatus('已停止')
     } else if (ev.type === 'error') {
       toast(ev.message)
     } else if (ev.type === 'done' && ev.node) {
@@ -1534,7 +1866,7 @@ function toggleShot(force) {
   S.shotMode = force ?? !S.shotMode
   $('#btn-shot').classList.toggle('on', S.shotMode)
   $('#pages').classList.toggle('shot-mode', S.shotMode)
-  if (S.shotMode) setStatus('拖拽框选区域，松手自动发送')
+  if (S.shotMode) setStatus('拖拽框选区域，松手后带到输入框')
   else setStatus('')
 }
 
@@ -1621,12 +1953,29 @@ function setStatus(t) {
   $('#status').textContent = t || ''
 }
 
-function toast(msg) {
+function toast(msg, kind = 'ok') {
   const t = $('#toast')
+  t.classList.toggle('err', kind === 'error')
   t.textContent = msg
   t.hidden = false
   clearTimeout(toast._t)
   toast._t = setTimeout(() => (t.hidden = true), 3800)
+}
+
+function formatTokens(n) {
+  const v = Number(n) || 0
+  if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M'
+  if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k'
+  return String(v)
+}
+
+function usageLine(u) {
+  if (!u) return ''
+  const parts = []
+  if (u.input) parts.push(`输入 ${formatTokens(u.input)}`)
+  if (u.cacheHit) parts.push(`缓存 ${formatTokens(u.cacheHit)}`)
+  if (u.output) parts.push(`输出 ${formatTokens(u.output)}`)
+  return parts.join(' · ')
 }
 
 function clampZoom(z) {
@@ -1866,6 +2215,43 @@ function openSettings() {
   const noAsk = $('#cfg-ask-remove')
   if (noAsk) noAsk.checked = localStorage.getItem(NO_ASK_REMOVE) !== '1'
   $('#settings').hidden = false
+}
+
+async function openUsage() {
+  const m = $('#usage')
+  if (!m) return
+  m.hidden = false
+  const body = $('#usage-body')
+  body.innerHTML = '<p class="usage-empty">加载中…</p>'
+  try {
+    const data = await fetch('/api/usage').then((r) => r.json())
+    const t = data.totals || {}
+    const pct = Math.round((t.hitRate || 0) * 100)
+    const fmt = (n) => formatTokens(n)
+    const rows = (data.days || [])
+      .slice()
+      .reverse()
+      .map(
+        (d) => `<tr><td>${esc(d.date)}</td><td class="num">${fmt(d.total)}</td><td class="num">${fmt(d.cacheHit)}</td><td class="num">${d.requests}</td></tr>`
+      )
+      .join('')
+    const docs = (data.docs || [])
+      .map((d) => `<tr><td>${esc(d.title)}</td><td class="num">${fmt(d.total)}</td><td class="num">${d.requests}</td></tr>`)
+      .join('')
+    body.innerHTML = `
+      <div class="usage-total">
+        <div><b>${fmt(t.total)}</b><span>总 tokens</span></div>
+        <div><b>${pct}%</b><span>缓存命中率</span></div>
+        <div><b>${fmt(t.cacheHit)}</b><span>缓存命中</span></div>
+        <div><b>${t.requests || 0}</b><span>提问数</span></div>
+      </div>
+      <div class="usage-sec">最近 14 天</div>
+      <table class="usage-table"><thead><tr><th>日期</th><th class="num">tokens</th><th class="num">缓存命中</th><th class="num">提问</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="usage-empty">还没有记录</td></tr>'}</tbody></table>
+      <div class="usage-sec">按文档</div>
+      <table class="usage-table"><thead><tr><th>文档</th><th class="num">tokens</th><th class="num">提问</th></tr></thead><tbody>${docs || '<tr><td colspan="3" class="usage-empty">还没有记录</td></tr>'}</tbody></table>`
+  } catch (e) {
+    body.innerHTML = '<p class="usage-empty">加载失败：' + esc(String(e.message || e)) + '</p>'
+  }
 }
 
 async function saveSettings() {
@@ -2436,6 +2822,30 @@ function bind() {
   bindWheelZoom()
   bindPageMenu()
   $('#btn-shot').addEventListener('click', () => toggleShot())
+  $('#btn-instr')?.addEventListener('click', () => setInstrMode(!S.instrMode))
+  $('#btn-stop')?.addEventListener('click', () => {
+    if (S.abort) S.abort.abort()
+  })
+  $('#doc-meta')?.addEventListener('click', (e) => {
+    if (e.target.closest('.meta-instr')) {
+      e.stopPropagation()
+      openInstrPop()
+    }
+  })
+  $('#instr-clear')?.addEventListener('click', clearInstructions)
+  document.addEventListener('mousedown', (e) => {
+    const pop = $('#instr-pop')
+    if (!pop || pop.hidden) return
+    if (!pop.contains(e.target) && !e.target.closest('.meta-instr')) closeInstrPop()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeInstrPop()
+  })
+  const comp = $('#composer')
+  comp?.addEventListener('pointerdown', (e) => {
+    S.composerArmed = Date.now() + 5000
+    if (!e.target.closest('input, textarea, button')) setTimeout(() => $('#q')?.focus(), 0)
+  })
   $('#btn-group')?.addEventListener('click', () => (S.selecting ? cancelSelecting() : startSelecting()))
   $('#group-create')?.addEventListener('click', createGroupFromSelection)
   $('#group-cancel')?.addEventListener('click', cancelSelecting)
@@ -2471,7 +2881,11 @@ function bind() {
     updateToolbar()
   })
   $('#page-scroll').addEventListener('scroll', onScrollerScroll, { passive: true })
-  $('#page-scroll').addEventListener('scroll', () => scheduleHeal(800), { passive: true })
+  $('#page-scroll').addEventListener('scroll', () => scheduleHeal(500), { passive: true })
+  $('#page-scroll').addEventListener('scrollend', () => scheduleHeal(120), { passive: true })
+  $('#pages').addEventListener('pointerdown', () => {
+    if (S.doc && S.doc.kind === 'pdf') scheduleHeal(0)
+  })
 
   // 休眠 / 切后台后画布可能被系统回收成白板，回来时自动重绘
   document.addEventListener('visibilitychange', () => {
@@ -2534,6 +2948,9 @@ function bind() {
   bindResizers()
   $('#cfg-cancel').addEventListener('click', () => ($('#settings').hidden = true))
   $('#cfg-save').addEventListener('click', saveSettings)
+  $('#btn-usage')?.addEventListener('click', openUsage)
+  $('#usage-close')?.addEventListener('click', () => ($('#usage').hidden = true))
+  $('#usage')?.addEventListener('click', (e) => { if (e.target.id === 'usage') $('#usage').hidden = true })
   $('#settings').addEventListener('click', (e) => {
     if (e.target.id === 'settings') $('#settings').hidden = true
   })
@@ -2551,6 +2968,39 @@ function bind() {
   bindTreeView()
 
   document.addEventListener('keydown', (e) => {
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && e.key.length === 1) {
+      const t2 = e.target
+      const inInput = t2 instanceof Element && t2.closest('input, textarea, [contenteditable="true"], .modal')
+      if (!inInput && S.doc && Date.now() < (S.composerArmed || 0)) {
+        const q = $('#q')
+        if (q && !q.disabled) {
+          q.focus()
+          q.value += e.key
+          e.preventDefault()
+          return
+        }
+      }
+    }
+    // Ctrl/Cmd +/- 缩放页面，Ctrl/Cmd 0 回到 100%
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && S.doc) {
+      const k = e.key
+      const cur = zoomPreviewZ ?? S.zoom
+      if (k === '=' || k === '+') {
+        e.preventDefault()
+        previewZoom(cur * 1.12)
+        return
+      }
+      if (k === '-' || k === '_') {
+        e.preventDefault()
+        previewZoom(cur / 1.12)
+        return
+      }
+      if (k === '0') {
+        e.preventDefault()
+        previewZoom(1)
+        return
+      }
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
       e.preventDefault()
       openSearch()

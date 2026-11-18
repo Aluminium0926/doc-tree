@@ -92,6 +92,64 @@ async function handleApi(req, res, url) {
     return json(res, 200, { docs: await store.listDocs(), groups: await store.listGroups(), flags: await store.getFlags(), config: llm.publicConfig(), serverVersion: SERVER_VERSION })
   }
 
+  if (p === '/api/usage' && req.method === 'GET') {
+    const docs = await store.listDocs()
+    const groups = await store.listGroups()
+    const groupName = new Map(groups.map((g) => [g.id, g.name]))
+    const seen = new Set()
+    const totals = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0, total: 0, requests: 0, rounds: 0 }
+    const dayMap = new Map()
+    const docMap = new Map()
+    const dayKey = (t) => {
+      const d = new Date(t)
+      const p = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    }
+    for (const doc of docs) {
+      const key = doc.groupId || doc.id
+      if (seen.has(key)) continue
+      seen.add(key)
+      const tree = await store.getTree(doc.id)
+      for (const n of Object.values(tree.nodes || {})) {
+        const u = n.usage
+        if (!u) continue
+        totals.input += u.input || 0
+        totals.output += u.output || 0
+        totals.cacheHit += u.cacheHit || 0
+        totals.cacheMiss += u.cacheMiss || 0
+        totals.total += u.total || (u.input || 0) + (u.output || 0)
+        totals.requests += 1
+        totals.rounds += u.rounds || 1
+        const dk = dayKey(n.createdAt || Date.now())
+        if (!dayMap.has(dk)) dayMap.set(dk, { date: dk, input: 0, output: 0, cacheHit: 0, cacheMiss: 0, total: 0, requests: 0 })
+        const dd = dayMap.get(dk)
+        dd.input += u.input || 0
+        dd.output += u.output || 0
+        dd.cacheHit += u.cacheHit || 0
+        dd.cacheMiss += u.cacheMiss || 0
+        dd.total += u.total || (u.input || 0) + (u.output || 0)
+        dd.requests += 1
+        if (!docMap.has(key))
+          docMap.set(key, {
+            title: doc.groupId ? groupName.get(doc.groupId) || doc.title : doc.title,
+            total: 0,
+            cacheHit: 0,
+            cacheMiss: 0,
+            requests: 0
+          })
+        const dm = docMap.get(key)
+        dm.total += u.total || (u.input || 0) + (u.output || 0)
+        dm.cacheHit += u.cacheHit || 0
+        dm.cacheMiss += u.cacheMiss || 0
+        dm.requests += 1
+      }
+    }
+    const hitRate = totals.cacheHit + totals.cacheMiss > 0 ? totals.cacheHit / (totals.cacheHit + totals.cacheMiss) : 0
+    const days = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-14)
+    const perDoc = [...docMap.values()].sort((a, b) => b.total - a.total).slice(0, 8)
+    return json(res, 200, { totals: { ...totals, hitRate }, days, docs: perDoc })
+  }
+
   if (p === '/api/config' && req.method === 'POST') {
     const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
     const patch = {}
@@ -212,8 +270,7 @@ if (p === '/api/flags' && req.method === 'POST') {
       add: Array.isArray(body.add) ? body.add : [],
       remove: Array.isArray(body.remove) ? body.remove : []
     })
-    if (!g) return json(res, 404, { error: '组不存在' })
-    return json(res, 200, { group: g })
+    return json(res, 200, { group: g, dissolved: !g })
   }
 
   if (p === '/api/group/dissolve' && req.method === 'POST') {
@@ -249,6 +306,52 @@ if (p === '/api/flags' && req.method === 'POST') {
       return fs.createReadStream(file).pipe(res)
     }
   }
+
+  if (p === '/api/instruction/remove' && req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
+    const doc = await store.getDoc(body.docId)
+    if (!doc) return json(res, 404, { error: '文档不存在' })
+    if (body.clear) doc.instructions = []
+    else {
+      const list = Array.isArray(doc.instructions) ? doc.instructions : []
+      const i = Number(body.index)
+      if (Number.isInteger(i) && i >= 0 && i < list.length) list.splice(i, 1)
+      doc.instructions = list
+    }
+    await store.saveDoc(doc)
+    return json(res, 200, { ok: true, count: doc.instructions.length, instructions: doc.instructions })
+  }
+
+  if (p === '/api/instruction' && req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
+    const doc = await store.getDoc(body.docId)
+    if (!doc) return json(res, 404, { error: '文档不存在' })
+    const text = String(body.text || '').trim().slice(0, 500)
+    if (!text) return json(res, 400, { error: '指令不能为空' })
+    if (/^(清除|清空).*指令$/.test(text)) {
+      doc.instructions = []
+      await store.saveDoc(doc)
+      return json(res, 200, { ok: true, count: 0, reply: '已清除所有指令' })
+    }
+    const cfg = llm.readConfig()
+    if (!cfg.apiKey) return json(res, 400, { error: '未配置 API Key' })
+    let reply = ''
+    try {
+      const s = await llm.chat(
+        [
+          { role: 'system', content: '你是「文档树」的指令接收器。用户会给出关于后续回答方式的指令。只回复一句简短确认（不超过 20 字），不要解释、不要重复指令。' },
+          { role: 'user', content: text }
+        ],
+        { maxTokens: 60, effort: 'low' }
+      )
+      reply = String(s || '').trim().slice(0, 60)
+    } catch {}
+    doc.instructions = [...(doc.instructions || []), text].slice(-20)
+    await store.saveDoc(doc)
+    return json(res, 200, { ok: true, count: doc.instructions.length, reply })
+  }
+
+  if (p === '/api/ask/resume' && req.method === 'POST') return handleResume(req, res)
 
   if (p === '/api/ask' && req.method === 'POST') {
     return handleAsk(req, res)
@@ -298,6 +401,99 @@ if (p === '/api/flags' && req.method === 'POST') {
   }
 
   json(res, 404, { error: 'not found' })
+}
+
+async function handleResume(req, res) {
+  const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
+  const cfg = llm.readConfig()
+  if (!cfg.apiKey) return json(res, 400, { error: '未配置 API Key' })
+
+  const doc = await store.getDoc(body.docId)
+  if (!doc) return json(res, 404, { error: '文档不存在' })
+  const group = await store.groupOfDoc(doc.id)
+  let docs = [doc]
+  if (group) docs = (await Promise.all(group.docIds.map((id) => store.getDoc(id)))).filter(Boolean)
+
+  const tree = await store.getTree(doc.id)
+  const node = tree.nodes[body.nodeId]
+  if (!node) return json(res, 404, { error: '这条回答不存在' })
+
+  const messages = buildAskMessages({ doc, docs, tree, node })
+  messages.push({ role: 'assistant', content: node.answer || '（还没有任何内容）' })
+  messages.push({
+    role: 'user',
+    content: '（上面的回答被中断了。请从断点处继续写，不要重复已有内容，也不要重新开头；必要时调用工具补读原文。）'
+  })
+
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no'
+  })
+  const sse = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`)
+  sse({ type: 'meta', node })
+
+  const ac = new AbortController()
+  let timedOut = false
+  const timeout = setTimeout(() => {
+    timedOut = true
+    try {
+      ac.abort()
+    } catch {}
+  }, 120000)
+  req.on('close', () => ac.abort())
+  res.on('close', () => ac.abort())
+
+  try {
+    const usage = await llm.streamChatWithTools(
+      messages,
+      (d) => {
+        node.answer += d
+        sse({ type: 'delta', text: d })
+      },
+      {
+        signal: ac.signal,
+        model: node.model || cfg.model,
+        exec: (name, args) => execTool(docs, doc.id, name, args),
+        onTool: (t) => sse({ type: 'tool', name: t.name, args: t.args }),
+        onReasoning: (t) => {
+          node.reasoning = (node.reasoning || '') + t
+          sse({ type: 'reasoning', text: t })
+        }
+      }
+    )
+    if (usage) {
+      const prev = node.usage || {}
+      node.usage = {
+        input: (prev.input || 0) + usage.input,
+        output: (prev.output || 0) + usage.output,
+        cacheHit: (prev.cacheHit || 0) + usage.cacheHit,
+        cacheMiss: (prev.cacheMiss || 0) + usage.cacheMiss,
+        total: (prev.total || 0) + usage.total,
+        rounds: (prev.rounds || 0) + (usage.rounds || 1)
+      }
+      sse({ type: 'usage', usage: node.usage })
+    }
+    delete node.stopped
+  } catch (e) {
+    if (timedOut) {
+      node.error = '请求超时（120 秒），已中止'
+      sse({ type: 'error', message: node.error })
+    } else if (ac.signal.aborted || (e && e.name === 'AbortError')) {
+      node.stopped = true
+      sse({ type: 'stopped' })
+    } else {
+      node.error = String(e.message || e)
+      sse({ type: 'error', message: node.error })
+    }
+  }
+
+  clearTimeout(timeout)
+  delete node.status
+  await store.saveTree(doc.id, tree)
+  sse({ type: 'done', node })
+  res.end()
 }
 
 async function handleAsk(req, res) {
@@ -357,11 +553,19 @@ async function handleAsk(req, res) {
   sse({ type: 'meta', node })
 
   const ac = new AbortController()
+  let timedOut = false
+  const timeout = setTimeout(() => {
+    timedOut = true
+    try {
+      ac.abort()
+    } catch {}
+  }, 120000)
   req.on('close', () => ac.abort())
+  res.on('close', () => ac.abort())
 
   try {
     const messages = buildAskMessages({ docs, tree, node, image: body.image })
-    await llm.streamChatWithTools(
+    const usage = await llm.streamChatWithTools(
       messages,
       (d) => {
         node.answer += d
@@ -372,19 +576,36 @@ async function handleAsk(req, res) {
         model: useModel,
         provider,
         exec: (name, args) => execTool(docs, doc.id, name, args),
+        onTool: (t) => sse({ type: 'tool', name: t.name, args: t.args }),
         onReasoning: (t) => {
           node.reasoning = (node.reasoning || '') + t
           sse({ type: 'reasoning', text: t })
         }
       }
     )
+    if (usage) {
+      node.usage = usage
+      sse({ type: 'usage', usage })
+    }
     node.status = 'done'
+    delete node.stopped
   } catch (e) {
-    node.status = 'error'
-    node.error = String(e.message || e)
-    sse({ type: 'error', message: node.error })
+    if (timedOut) {
+      node.status = 'error'
+      node.error = '请求超时（120 秒），已中止'
+      sse({ type: 'error', message: node.error })
+    } else if (ac.signal.aborted || (e && e.name === 'AbortError')) {
+      node.status = 'stopped'
+      node.stopped = true
+      sse({ type: 'stopped' })
+    } else {
+      node.status = 'error'
+      node.error = String(e.message || e)
+      sse({ type: 'error', message: node.error })
+    }
   }
 
+  clearTimeout(timeout)
   if (node.reasoning) node.reasoning = node.reasoning.slice(0, 6000)
   delete node.status
   await store.saveTree(body.docId, tree)

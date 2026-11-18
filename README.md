@@ -17,10 +17,10 @@
 |---|---|---|
 | **手机 / 平板浏览器** | 打开 **https://aluminium0926.github.io/doc-tree/** ，「添加到桌面」 | 零安装，数据存浏览器本地，可离线 |
 | **iOS** | Safari 打开同一网址 → 分享 → 添加到主屏幕 | 不需要 App Store，长按选中提问已适配 |
-| **安卓** | 下载 `android-v1.0.8` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
+| **安卓** | 下载 `android-v1.0.9` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
 | **鸿蒙 NEXT** | 用系统自带的**卓易通**安装同一个 APK；不装就用上面的网页版 | 卓易通提供安卓运行时，装完 APK 可当普通 App 用 |
-| **Windows** | 下载 `DocTree-1.0.9-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
-| **macOS** | 下载 `mac-arm64-v1.0.6` / `mac-x64-v1.0.6` 里的 zip，解压后双击 `首次打开.command` | 未公证，首次需右键「打开」 |
+| **Windows** | 下载 `DocTree-1.0.10-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
+| **macOS** | 下载 `mac-arm64-v1.0.7` / `mac-x64-v1.0.7` 里的 zip，解压后双击 `首次打开.command` | 未公证，首次需右键「打开」 |
 | 开发者 | `npm install && npm start` | 起本地服务端，`HOST=0.0.0.0` 可让局域网手机访问 |
 
 ### 网页版最省事
@@ -61,6 +61,16 @@
 
 ## 最近更新
 
+- **v1.0.10**
+  - 文档组编辑：重命名、移入/移出、成员不足自动解散；「已移除」可折叠
+  - 指令模式：发送指令修改回答方式，不计入提问树；点「指令 N」可查看/删除
+  - 停止生成 + 继续生成
+  - 用量面板：缓存命中率、按天/按文档统计；节点显示本次 tokens
+  - 请求重试（429/5xx）与 120 秒超时
+  - 工具状态提示、read_pages 跨页读取、句子级分块、命中页前后扩展
+  - 提示词缓存优化：静态 system、稳定段前置、Anthropic cache_control
+  - 截图预览限宽、Ctrl +/- 缩放、停止图标与提示样式调整
+  - 修复 DSML 标记漏出、追问页码、空白页、输入焦点等问题
 - **v1.0.9**
   - 修复 DeepSeek 工具调用把 `<|DSML|invoke>` 标记当正文显示的问题
   - 流式过滤 DSML，工具照常执行
@@ -108,11 +118,11 @@
 
 | 产物 | Release |
 |---|---|
-| `DocTree-android.apk` | [android-v1.0.8](https://github.com/Aluminium0926/doc-tree/releases/tag/android-v1.0.8) |
-| `DocTree-mac-arm64.zip`（Apple Silicon） | [mac-arm64-v1.0.6](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.6) |
-| `DocTree-mac-x64.zip`（Intel Mac） | [mac-x64-v1.0.6](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.6) |
-| `DocTree-web-v1.0.6.zip`（静态包，自建托管用） | [web-v1.0.6](https://github.com/Aluminium0926/doc-tree/releases/tag/web-v1.0.6) |
-| `DocTree-1.0.9-win32-x64.zip`（Windows 便携版） | [v1.0.9](https://github.com/Aluminium0926/doc-tree/releases/tag/v1.0.9) |
+| `DocTree-android.apk` | [android-v1.0.9](https://github.com/Aluminium0926/doc-tree/releases/tag/android-v1.0.9) |
+| `DocTree-mac-arm64.zip`（Apple Silicon） | [mac-arm64-v1.0.7](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.7) |
+| `DocTree-mac-x64.zip`（Intel Mac） | [mac-x64-v1.0.7](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.7) |
+| `DocTree-web-v1.0.7.zip`（静态包，自建托管用） | [web-v1.0.7](https://github.com/Aluminium0926/doc-tree/releases/tag/web-v1.0.7) |
+| `DocTree-1.0.10-win32-x64.zip`（Windows 便携版） | [v1.0.10](https://github.com/Aluminium0926/doc-tree/releases/tag/v1.0.10) |
 
 ## 快速开始（源码）
 
@@ -177,20 +187,20 @@ npm run dist    # 用 electron-packager 打包到 release/
 ### 手机 / 安卓 / 鸿蒙
 
 - **网页版（最省事）**：https://aluminium0926.github.io/doc-tree/
-- **安卓 APK**：`android-v1.0.8` 里的 `DocTree-android.apk`
+- **安卓 APK**：`android-v1.0.9` 里的 `DocTree-android.apk`
   - WebView + 应用内本地服务（`127.0.0.1:47201`），数据存 IndexedDB，模型请求经本地代理
   - 架构与构建步骤见 [安卓与鸿蒙](docs/安卓与鸿蒙.md)
 - **HarmonyOS NEXT**：系统自带**卓易通**（安卓运行时），用它安装同一个 APK 即可，装完就是一个普通 App。不装就用网页版（PWA 可添加到桌面）；用 ArkTS `Web` 组件套壳也能复用 `mobile/www`
 - **iOS**：Safari 打开网页版 → 分享 → 添加到主屏幕；长按选中提问、导出、存储持久化都做了适配
-- **自建自托管**：`DocTree-web-v1.0.6.zip` 解压后任意静态服务器托管；`HOST=0.0.0.0 node mobile/static-server.mjs` 会打印手机可访问地址
+- **自建自托管**：`DocTree-web-v1.0.7.zip` 解压后任意静态服务器托管；`HOST=0.0.0.0 node mobile/static-server.mjs` 会打印手机可访问地址
 
 ### macOS
 
 三种方式，按省事程度排：
 
 1. **现成安装包**（推荐）
-   - Apple Silicon：[mac-arm64-v1.0.6](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.6) → `DocTree-mac-arm64.zip`
-   - Intel：[mac-x64-v1.0.6](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.6) → `DocTree-mac-x64.zip`
+   - Apple Silicon：[mac-arm64-v1.0.7](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.7) → `DocTree-mac-arm64.zip`
+   - Intel：[mac-x64-v1.0.7](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.7) → `DocTree-mac-x64.zip`
 
    解压后**双击「首次打开.command」**：它会自动去掉隔离标记、做本地临时签名，然后启动。
 

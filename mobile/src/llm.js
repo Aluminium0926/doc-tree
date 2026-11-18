@@ -71,6 +71,16 @@ function toAnthropic(messages) {
       out.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: String(m.content || '') }] })
       continue
     }
+    if (m.role === 'user' && m._stableText) {
+      out.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: m._stableText, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: m._volatileText || '' }
+        ]
+      })
+      continue
+    }
     const role = m.role === 'assistant' ? 'assistant' : 'user'
     let content
     if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length) {
@@ -167,7 +177,7 @@ function anthropicBody(cfg, messages, { model, stream, maxTokens }) {
     temperature: Math.min(1, Math.max(0, cfg.temperature ?? 0.3))
   }
   if (stream) body.stream = true
-  if (conv.system) body.system = conv.system
+  if (conv.system) body.system = [{ type: 'text', text: conv.system, cache_control: { type: 'ephemeral' } }]
   return body
 }
 
@@ -230,6 +240,7 @@ export async function streamChat(messages, onDelta, { signal, model, onReasoning
   const reader = res.body.getReader()
   const dec = new TextDecoder()
   let buf = ''
+  let usage = null
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
@@ -243,6 +254,9 @@ export async function streamChat(messages, onDelta, { signal, model, onReasoning
       if (data === '[DONE]') return
       try {
         const j = JSON.parse(data)
+        if (j.usage) usage = { ...(usage || {}), ...j.usage }
+        if (j.type === 'message_start' && j.message?.usage) usage = { ...(usage || {}), ...j.message.usage }
+        if (j.type === 'message_delta' && j.usage) usage = { ...(usage || {}), ...j.usage }
         if (format === 'anthropic') {
           if (j.type === 'content_block_delta') {
             const d = j.delta || {}
@@ -264,28 +278,47 @@ export async function streamChat(messages, onDelta, { signal, model, onReasoning
       }
     }
   }
+  return normalizeUsage(usage, format)
 }
 
 // ---------- 工具调用 ----------
 
-function stripDSML(s) {
+function normalizeDSML(s) {
   return String(s || '')
+    .replace(/\uFF1C/g, '<')
+    .replace(/\uFF1E/g, '>')
+    .replace(/\uFF5C/g, '|')
+    .replace(/\uFF0F/g, '/')
+    .replace(/\uFF02/g, '"')
+    .replace(/\uFF1D/g, '=')
+}
+
+function stripDSML(s) {
+  return normalizeDSML(s)
     .replace(/^\s+/, '')
     .replace(/<[^>]*?invoke[^>]*?name\s*=\s*"[^"]*"[^>]*>[\s\S]*?<\/[^>]*?invoke\s*>/gi, '')
     .replace(/<[^>]*?DSML[^>]*>/gi, '')
     .replace(/<\/[^>]*?DSML[^>]*>/gi, '')
     .replace(/<\/?[^>]*?parameter[^>]*>/gi, '')
+    .trim()
 }
 
 function visibleDSML(s) {
-  const src = String(s || '')
-  const at = src.search(/<\s*[|｜]\s*[|｜]\s*DSML/i)
-  const head = at >= 0 ? src.slice(0, at) : src
+  const src = normalizeDSML(s)
+  const at = src.search(/<\s*[|｜]\s*(?:[|｜]\s*)?DSML/i)
+  let head = at >= 0 ? src.slice(0, at) : src
+  for (const p of ['<|DSML|', '<|DSML', '<|DSM', '<|DS', '<|D', '<|', '<']) {
+    if (head.endsWith(p)) {
+      head = head.slice(0, head.length - p.length)
+      break
+    }
+  }
   return stripDSML(head)
 }
 
 function parseDSMLCalls(s) {
   const calls = []
+  s = normalizeDSML(s)
   const re = /<[^>]*?invoke[^>]*?name\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/[^>]*?invoke\s*>/gi
   for (const m of String(s || '').matchAll(re)) {
     const input = {}
@@ -295,6 +328,30 @@ function parseDSMLCalls(s) {
     calls.push({ name: m[1], arguments: JSON.stringify(input) })
   }
   return calls
+}
+
+function normalizeUsage(u, format, rounds = 1) {
+  if (!u) return null
+  const n =
+    format === 'anthropic'
+      ? { input: u.input_tokens || 0, output: u.output_tokens || 0, cacheHit: u.cache_read_input_tokens || 0, cacheMiss: u.cache_creation_input_tokens || 0 }
+      : { input: u.prompt_tokens || 0, output: u.completion_tokens || 0, cacheHit: u.prompt_cache_hit_tokens || 0, cacheMiss: u.prompt_cache_miss_tokens || 0 }
+  n.total = u.total_tokens || n.input + n.output
+  n.rounds = rounds
+  return n
+}
+
+function mergeUsage(a, b) {
+  if (!b) return a
+  if (!a) return { ...b }
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    cacheHit: a.cacheHit + b.cacheHit,
+    cacheMiss: a.cacheMiss + b.cacheMiss,
+    total: a.total + b.total,
+    rounds: Math.max(a.rounds || 1, b.rounds || 1)
+  }
 }
 
 function parseToolArgs(s) {
@@ -318,6 +375,7 @@ async function openaiToolRound(cfg, messages, tools, { signal, onDelta, onReason
     model: model || cfg.model,
     messages,
     stream: true,
+    stream_options: { include_usage: true },
     temperature: cfg.temperature,
     max_tokens: 4096,
     ...(tools.length ? { tools, tool_choice: 'auto' } : {})
@@ -329,6 +387,7 @@ async function openaiToolRound(cfg, messages, tools, { signal, onDelta, onReason
   let buf = ''
   let text = ''
   let shown = ''
+  let usage = null
   const calls = []
   const emit = (full) => {
     const vis = visibleDSML(full)
@@ -350,6 +409,7 @@ async function openaiToolRound(cfg, messages, tools, { signal, onDelta, onReason
       if (data === '[DONE]') break
       try {
         const j = JSON.parse(data)
+        if (j.usage) usage = j.usage
         const delta = j.choices?.[0]?.delta
         if (!delta) continue
         if (delta.reasoning_content && onReasoning) onReasoning(delta.reasoning_content)
@@ -369,7 +429,7 @@ async function openaiToolRound(cfg, messages, tools, { signal, onDelta, onReason
   }
   const dsml = parseDSMLCalls(text)
   const allCalls = [...calls.filter(Boolean), ...dsml]
-  return { text: stripDSML(text), calls: allCalls }
+  return { text: stripDSML(text), calls: allCalls, usage: normalizeUsage(usage, 'openai') }
 }
 
 async function anthropicToolRound(cfg, messages, tools, { signal, onDelta, onReasoning, model, provider }) {
@@ -381,15 +441,28 @@ async function anthropicToolRound(cfg, messages, tools, { signal, onDelta, onRea
     stream: true,
     temperature: Math.min(1, Math.max(0, cfg.temperature))
   }
-  if (conv.system) body.system = conv.system
-  if (tools.length) body.tools = tools
+  if (conv.system) body.system = [{ type: 'text', text: conv.system, cache_control: { type: 'ephemeral' } }]
+  if (tools.length) {
+    body.tools = tools.map((tool, i) =>
+      i === tools.length - 1 ? { ...tool, cache_control: { type: 'ephemeral' } } : tool
+    )
+  }
   const res = await requestModel(cfg, JSON.stringify(body), signal, provider)
   if (!res.ok) throw new Error(explain(res.status, await res.text()))
   const reader = res.body.getReader()
   const dec = new TextDecoder()
   let buf = ''
   let text = ''
+  let shown = ''
+  let usage = null
   const blocks = []
+  const emit = (full) => {
+    const vis = visibleDSML(full)
+    if (vis.length > shown.length) {
+      onDelta(vis.slice(shown.length))
+      shown = vis
+    }
+  }
   while (true) {
     const { value, done } = await reader.read()
     if (done) break
@@ -403,6 +476,8 @@ async function anthropicToolRound(cfg, messages, tools, { signal, onDelta, onRea
       if (data === '[DONE]') break
       try {
         const j = JSON.parse(data)
+        if (j.type === 'message_start' && j.message?.usage) usage = { ...(usage || {}), ...j.message.usage }
+        if (j.type === 'message_delta' && j.usage) usage = { ...(usage || {}), ...j.usage }
         if (j.type === 'content_block_start') {
           const cb = j.content_block || {}
           if (cb.type === 'tool_use') blocks[j.index] = { id: cb.id, name: cb.name, json: '' }
@@ -410,7 +485,7 @@ async function anthropicToolRound(cfg, messages, tools, { signal, onDelta, onRea
           const d = j.delta || {}
           if (d.type === 'text_delta' && d.text) {
             text += d.text
-            onDelta(d.text)
+            emit(text)
           } else if (d.type === 'thinking_delta' && d.thinking && onReasoning) {
             onReasoning(d.thinking)
           } else if (d.type === 'input_json_delta' && blocks[j.index]) {
@@ -421,7 +496,7 @@ async function anthropicToolRound(cfg, messages, tools, { signal, onDelta, onRea
     }
   }
   const calls = blocks.filter(Boolean).map((b) => ({ id: b.id, name: b.name, arguments: b.json || '{}' }))
-  return { text, calls }
+  return { text, calls, usage: normalizeUsage(usage, 'anthropic') }
 }
 
 export async function streamChatWithTools(messages, onDelta, { signal, model, onReasoning, provider, specs, exec, maxRounds = 6 } = {}) {
@@ -432,13 +507,18 @@ export async function streamChatWithTools(messages, onDelta, { signal, model, on
   const tools = toolSpecsFor(format, specs || [])
 
   let rounds = 0
+  let totalUsage = null
   while (rounds < maxRounds) {
     rounds++
     const round =
       format === 'anthropic'
         ? await anthropicToolRound(cfg, messages, tools, { signal, onDelta, onReasoning, model, provider })
         : await openaiToolRound(cfg, messages, tools, { signal, onDelta, onReasoning, model, provider })
-    if (!round.calls.length) return
+    totalUsage = mergeUsage(totalUsage, round.usage)
+    if (!round.calls.length) {
+      if (totalUsage) totalUsage.rounds = rounds
+      return totalUsage
+    }
 
     if (format === 'anthropic') {
       messages.push({
@@ -456,6 +536,9 @@ export async function streamChatWithTools(messages, onDelta, { signal, model, on
       })
     }
     for (const c of round.calls) {
+      try {
+        onTool?.({ name: c.name, args: parseToolArgs(c.arguments) })
+      } catch {}
       let result
       try {
         result = await exec(c.name, parseToolArgs(c.arguments))
@@ -465,5 +548,8 @@ export async function streamChatWithTools(messages, onDelta, { signal, model, on
       messages.push({ role: 'tool', tool_call_id: c.id, content: String(result) })
     }
   }
-  await streamChat(messages, onDelta, { signal, model, onReasoning, provider })
+  const finalUsage = await streamChat(messages, onDelta, { signal, model, onReasoning, provider })
+  const merged = mergeUsage(totalUsage, finalUsage)
+  if (merged) merged.rounds = rounds
+  return merged
 }

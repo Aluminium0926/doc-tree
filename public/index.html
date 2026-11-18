@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <meta name="theme-color" content="#0a0c11">
 <script src="/theme.js"></script>
-<link rel="stylesheet" href="/style.css?v=75">
+<link rel="stylesheet" href="/style.css?v=100">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <link id="hljs-theme" rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
 <script src="/vendor/highlight/highlight.min.js" defer></script>
@@ -70,7 +70,7 @@
             <button class="dot" data-color="#ffb3c7" title="粉"></button>
           </div>
         </div>
-        <button id="btn-shot" class="ghost" title="拖拽框选一块区域，松手自动发送">框选截图</button>
+        <button id="btn-shot" class="ghost" title="框选截图（拖拽后带到输入框）">框选截图</button>
       </div>
     </header>
     <div id="page-scroll"><div id="pages"></div></div>
@@ -99,14 +99,16 @@
     <button id="btn-locate" title="定位到最新提问" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
     <div id="composer">
       <div id="anchor-chip" hidden><span class="chip-text"></span><button class="chip-x">×</button></div>
-      <div id="shot-chip" hidden><img alt="截图"><button class="chip-x">×</button></div>
+      <div id="shot-chip" hidden><span class="shot-thumb"><img alt="截图"></span><button class="chip-x">×</button></div>
       <textarea id="q" rows="2" placeholder="选中文字后点「发送」提问，留空也行"></textarea>
       <div class="composer-foot">
         <div class="effort" title="思考强度：轻=快，深度=更缜密但更慢">
           <input id="effort" type="range" min="0" max="2" step="1" aria-label="思考强度">
           <span id="effort-label">标准</span>
         </div>
+        <button id="btn-instr" class="ghost instr" title="指令模式：输入什么就发什么，用来改回答方式（不计入提问树）；发送「清除指令」可清空">指令</button>
         <span id="status"></span>
+        <button id="btn-stop" class="stop-btn" hidden title="停止生成"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="1" y="1" width="8" height="8" rx="1.8" fill="currentColor"/></svg></button>
         <button id="btn-send" title="发送（回车）"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
       </div>
     </div>
@@ -166,6 +168,13 @@
   </div>
 </div>
 
+<div id="usage" class="modal" hidden>
+  <div class="modal-card usage-card">
+    <h3>模型用量</h3>
+    <div id="usage-body"><p class="usage-empty">加载中…</p></div>
+    <div class="modal-actions"><button id="usage-close">关闭</button></div>
+  </div>
+</div>
 <div id="update" class="modal" hidden>
   <div class="modal-card welcome-card">
     <h3>发现新版本</h3>
@@ -203,6 +212,7 @@
     <label class="cfg-check"><input type="checkbox" id="cfg-ask-remove"> 移出文档前先确认</label>
     <label class="cfg-check"><input type="checkbox" id="cfg-update-check"> 启动时检查新版本（取消勾选即静默）</label>
     <p class="welcome-ver" id="settings-ver"></p>
+    <button id="btn-usage" class="ghost usage-open">查看模型用量</button>
     <p class="welcome-disclaimer">免责声明：本软件不提供模型服务；模型账号的地区限制、费用与停用风险由使用者自行承担。</p>
     <div class="modal-actions">
       <button id="cfg-cancel" class="ghost">取消</button>
@@ -212,7 +222,7 @@
 </div>
 
 <script src="/vendor/katex/katex.min.js"></script>
-<script type="module" src="/app.js?v=75"></script>
+<script type="module" src="/app.js?v=100"></script>
 <div id="theme-pop" class="theme-pop" hidden>
   <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
   <div class="tp-seg" id="tp-mode">
@@ -246,5 +256,10 @@
   <button id="tp-reset" class="tp-reset" type="button">恢复默认</button>
 </div>
 <div id="stale" class="stale" hidden><span id="stale-text"></span><button id="stale-x" aria-label="关闭">×</button></div>
+<div id="instr-pop" class="instr-pop" hidden>
+  <div class="ip-head">附加指令</div>
+  <div id="instr-list"></div>
+  <button id="instr-clear">清空全部</button>
+</div>
 </body>
 </html>
