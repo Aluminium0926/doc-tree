@@ -1,0 +1,82 @@
+﻿/* 移动端适配：竖屏下文档区在上、追问树在下，文档库改为抽屉 */
+#btn-mobile-lib, #lib-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  html, body { height: 100%; -webkit-text-size-adjust: 100%; }
+  #app {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    height: 100vh;   /* 旧 Safari 兜底 */
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* 文档库：抽屉 */
+  #library {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 82vw;
+    max-width: 360px;
+    z-index: 60;
+    transform: translateX(-102%);
+    transition: transform 0.2s var(--ease);
+    box-shadow: 24px 0 48px rgba(0, 0, 0, 0.5);
+  }
+  #app.mobile-lib-open #library { transform: none; }
+  #lib-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 55;
+    display: none;
+  }
+  #app.mobile-lib-open #lib-backdrop { display: block; }
+
+  #btn-mobile-lib {
+    display: grid;
+    position: fixed;
+    left: 10px;
+    top: 12px;
+    z-index: 40;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 17px;
+    backdrop-filter: blur(6px);
+  }
+  #viewer { flex: 1 1 auto; min-height: 34dvh; }
+  #toolbar { padding-left: 58px; }
+  #sidebar {
+    flex: 0 0 48dvh;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  #resizer-in, #resizer-left { display: none !important; }
+
+  /* 工具条可横向滑动，按钮加大 */
+  #toolbar { overflow-x: auto; scrollbar-width: none; }
+  #toolbar::-webkit-scrollbar { display: none; }
+  #toolbar button { min-width: 36px; min-height: 34px; }
+  .page-nav input { width: 42px; }
+
+  /* 输入区更紧凑，方便软键盘 */
+  #composer { left: 10px; right: 10px; bottom: 10px; padding: 10px 12px 12px; }
+  #tree { padding: 12px 16px; }
+  #sidebar::after { height: 10px; }
+  #q { min-height: 48px; }
+  .tree-node .answer { font-size: 14px; }
+  .float-menu button { padding: 10px 14px; }
+  #hint { padding: 40px 24px; text-align: center; }
+}
+
+/* 横屏或平板：保持左右分栏，但收窄 */
+@media (min-width: 901px) and (max-width: 1180px) {
+  #app { grid-template-columns: 190px minmax(0, 1fr) 380px; }
+}
