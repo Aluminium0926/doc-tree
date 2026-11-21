@@ -1,5 +1,5 @@
 // 离线缓存：应用外壳优先缓存，接口与模型代理走网络
-const CACHE = 'doctree-v2'
+const CACHE = 'doctree-v3'
 const SHELL = [
   './',
   './index.html',
@@ -33,6 +33,22 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return
   if (url.pathname.startsWith('/proxy/') || url.pathname.startsWith('/api/')) return
   if (url.origin !== location.origin) return
+
+  const shell = e.request.mode === 'navigate' || /\/(app\.js|style\.css|mobile\.css|theme\.js|index\.html)$/.test(url.pathname)
+  if (shell) {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(CACHE).then((c) => c.put(e.request, copy))
+          }
+          return res
+        })
+        .catch(() => caches.match(e.request))
+    )
+    return
+  }
 
   e.respondWith(
     caches.match(e.request).then((hit) => {

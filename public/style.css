@@ -405,7 +405,7 @@ body.col-resizing * { cursor: col-resize !important; }
 .textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; }
 .textLayer span { position: absolute; white-space: pre; transform-origin: 0 0; color: transparent; cursor: text; }
 .textLayer span::selection { background: color-mix(in srgb, var(--accent) 34%, transparent); }
-.shot-mode .page { cursor: crosshair; }
+.shot-mode .page { cursor: crosshair; touch-action: none; user-select: none; }
 .shot-box { position: absolute; border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); pointer-events: none; border-radius: 3px; }
 .anchor-hl {
   position: absolute;

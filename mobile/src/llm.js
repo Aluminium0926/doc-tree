@@ -8,7 +8,8 @@ function resolveFormat(baseUrl, explicit) {
 
 function endpointFor(cfg, provider) {
   const base = (provider?.baseUrl || cfg.baseUrl).replace(/\/+$/, '')
-  const format = resolveFormat(base, provider?.format ?? cfg.apiFormat)
+  const explicitFormat = provider?.format && provider.format !== 'auto' ? provider.format : cfg.apiFormat
+  const format = resolveFormat(base, explicitFormat)
   if (format === 'anthropic') {
     if (/\/v1\/messages$/.test(base)) return base
     if (/\/v1$/.test(base)) return base + '/messages'
@@ -29,7 +30,8 @@ function authHeaders(cfg, provider, format, direct) {
 
 function proxyHeaders(cfg, provider) {
   const base = provider?.baseUrl || cfg.baseUrl
-  const format = resolveFormat(base, provider?.format ?? cfg.apiFormat)
+  const explicitFormat = provider?.format && provider.format !== 'auto' ? provider.format : cfg.apiFormat
+  const format = resolveFormat(base, explicitFormat)
   return {
     ...authHeaders(cfg, provider, format, false),
     'content-type': 'application/json',
@@ -99,6 +101,7 @@ function toAnthropic(messages) {
       content = (m.content || [])
         .map((part) => {
           if (part.type === 'text') return { type: 'text', text: part.text || '' }
+          if (part.type === 'tool_use' || part.type === 'tool_result' || part.type === 'image') return part
           if (part.type === 'image_url') {
             const url = part.image_url?.url || ''
             const hit = url.match(/^data:([^;]+);base64,(.*)$/)
@@ -136,6 +139,23 @@ function looksLikeModelResponse(res) {
   return ct.includes('application/json') || ct.includes('text/event-stream')
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function fetchRetry(url, opts, retries = 2) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, opts)
+      const retryable = res.status === 429 || [500, 502, 503, 504].includes(res.status)
+      if (res.ok || !retryable || attempt >= retries) return res
+      const retryAfter = Number(res.headers.get('retry-after')) * 1000
+      await sleep(retryAfter > 0 ? retryAfter : 600 * 2 ** attempt)
+    } catch (e) {
+      if (opts?.signal?.aborted || attempt >= retries || navigator.onLine === false) throw e
+      await sleep(600 * 2 ** attempt)
+    }
+  }
+}
+
 async function requestModel(cfg, payload, signal, provider) {
   if (proxyState !== 'none') {
     try {
@@ -160,7 +180,7 @@ async function requestModel(cfg, payload, signal, provider) {
       setProxyState('none')
     }
   }
-  return fetch(endpointFor(cfg, provider), {
+  return fetchRetry(endpointFor(cfg, provider), {
     method: 'POST',
     headers: directHeaders(cfg, provider),
     body: payload,
@@ -328,6 +348,11 @@ function parseDSMLCalls(s) {
     calls.push({ name: m[1], arguments: JSON.stringify(input) })
   }
   return calls
+}
+
+function anthropicImageBlock(dataUrl) {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(String(dataUrl || ''))
+  return { type: 'image', source: { type: 'base64', media_type: m?.[1] || 'image/png', data: m?.[2] || '' } }
 }
 
 function normalizeUsage(u, format, rounds = 1) {
@@ -535,17 +560,45 @@ export async function streamChatWithTools(messages, onDelta, { signal, model, on
         tool_calls: round.calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments || '{}' } }))
       })
     }
+    const results = []
     for (const c of round.calls) {
       try {
         onTool?.({ name: c.name, args: parseToolArgs(c.arguments) })
       } catch {}
-      let result
+      let raw
       try {
-        result = await exec(c.name, parseToolArgs(c.arguments))
+        raw = await exec(c.name, parseToolArgs(c.arguments))
       } catch (e) {
-        result = '工具执行失败：' + (e.message || e)
+        raw = '工具执行失败：' + (e.message || e)
       }
-      messages.push({ role: 'tool', tool_call_id: c.id, content: String(result) })
+      const text = typeof raw === 'string' ? raw : String(raw?.text ?? '')
+      const image = raw && typeof raw === 'object' && raw.image ? raw.image : null
+      results.push({ call: c, text, image })
+    }
+
+    if (format === 'anthropic') {
+      messages.push({
+        role: 'user',
+        content: results.map((r) => ({
+          type: 'tool_result',
+          tool_use_id: r.call.id,
+          content: r.image ? [{ type: 'text', text: r.text }, anthropicImageBlock(r.image)] : r.text
+        }))
+      })
+    } else {
+      for (const r of results) {
+        messages.push({ role: 'tool', tool_call_id: r.call.id, content: r.text })
+      }
+      const imgs = results.filter((r) => r.image)
+      if (imgs.length) {
+        messages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: '（下面是工具读取的页面截图，供识别图表、公式和文字层遗漏的内容。）' },
+            ...imgs.map((r) => ({ type: 'image_url', image_url: { url: r.image, detail: 'high' } }))
+          ]
+        })
+      }
     }
   }
   const finalUsage = await streamChat(messages, onDelta, { signal, model, onReasoning, provider })

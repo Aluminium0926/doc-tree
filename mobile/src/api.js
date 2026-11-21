@@ -85,6 +85,17 @@ function sseResponse(run) {
   })
 }
 
+async function execWithPageImage(docs, docId, name, args) {
+  const out = await execTool(docs, docId, name, args)
+  if (name === 'read_page' && args && args.page) {
+    try {
+      const img = await globalThis.__dtPageImage?.(Number(args.page))
+      if (img) return { text: out, image: img }
+    } catch {}
+  }
+  return out
+}
+
 async function handleAsk(init) {
   const body = await bodyJson(init)
   const doc = await db.getDoc(body.docId)
@@ -99,9 +110,15 @@ async function handleAsk(init) {
   const tree = await docTree(body.docId)
   const cfg = readConfig()
   const id = hex(6)
-  const useModel = body.image ? cfg.visionModel || cfg.model : cfg.model
-  const provider = body.image
-    ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat }
+  let pageImage = body.image || null
+  if (!pageImage && doc.kind === 'pdf') {
+    try {
+      pageImage = await globalThis.__dtPageImage?.(body.anchor?.page || 1)
+    } catch {}
+  }
+  const useModel = pageImage ? cfg.visionModel || cfg.model : cfg.model
+  const provider = pageImage
+    ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat || cfg.apiFormat }
     : null
   const node = {
     id,
@@ -117,10 +134,22 @@ async function handleAsk(init) {
   tree.nodes[id] = node
   await saveDocTree(body.docId, tree)
 
+  const ac = new AbortController()
+  let timedOut = false
+  const timeout = setTimeout(() => {
+    timedOut = true
+    try { ac.abort() } catch {}
+  }, 120000)
+  const onAbort = () => ac.abort()
+  if (init?.signal) {
+    if (init.signal.aborted) ac.abort()
+    else init.signal.addEventListener('abort', onAbort, { once: true })
+  }
+
   return sseResponse(async (send) => {
     send({ type: 'meta', node })
     try {
-      const messages = buildAskMessages({ docs, tree, node, image: body.image })
+      const messages = buildAskMessages({ docs, tree, node, image: pageImage })
       const usage = await streamChatWithTools(
         messages,
         (d) => {
@@ -128,10 +157,11 @@ async function handleAsk(init) {
           send({ type: 'delta', text: d })
         },
         {
+          signal: ac.signal,
           model: useModel,
           provider,
           specs: TOOL_SPECS,
-          exec: (name, args) => execTool(docs, doc.id, name, args),
+          exec: (name, args) => execWithPageImage(docs, doc.id, name, args),
           onTool: (t) => send({ type: 'tool', name: t.name, args: t.args }),
           onReasoning: (t) => {
             node.reasoning = (node.reasoning || '') + t
@@ -144,9 +174,19 @@ async function handleAsk(init) {
         send({ type: 'usage', usage })
       }
     } catch (e) {
-      node.error = String(e.message || e)
-      send({ type: 'error', message: node.error })
+      if (timedOut) {
+        node.error = '请求超时（120 秒），已中止'
+        send({ type: 'error', message: node.error })
+      } else if (ac.signal.aborted) {
+        node.stopped = true
+        send({ type: 'stopped' })
+      } else {
+        node.error = String(e.message || e)
+        send({ type: 'error', message: node.error })
+      }
     }
+    clearTimeout(timeout)
+    if (init?.signal) init.signal.removeEventListener('abort', onAbort)
     if (node.reasoning) node.reasoning = node.reasoning.slice(0, 6000)
     delete node.status
     await saveDocTree(body.docId, tree)
@@ -479,7 +519,13 @@ async function handleApi(path, init) {
     const node = tree.nodes[body.nodeId]
     if (!node) return json({ error: '这条回答不存在' }, 404)
 
-    const messages = buildAskMessages({ docs, tree, node })
+    let resumeImage = null
+    if (doc.kind === 'pdf') {
+      try {
+        resumeImage = await globalThis.__dtPageImage?.(node.anchor?.page || 1)
+      } catch {}
+    }
+    const messages = buildAskMessages({ docs, tree, node, image: resumeImage })
     messages.push({ role: 'assistant', content: node.answer || '（还没有任何内容）' })
     messages.push({ role: 'user', content: '（上面的回答被中断了。请从断点处继续写，不要重复已有内容，也不要重新开头。）' })
 
@@ -493,9 +539,12 @@ async function handleApi(path, init) {
             send({ type: 'delta', text: d })
           },
           {
-            model: node.model || cfg.model,
+            model: resumeImage ? cfg.visionModel || node.model || cfg.model : node.model || cfg.model,
+            provider: resumeImage
+              ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat || cfg.apiFormat }
+              : null,
             specs: TOOL_SPECS,
-            exec: (name, args) => execTool(docs, doc.id, name, args),
+            exec: (name, args) => execWithPageImage(docs, doc.id, name, args),
             onTool: (t2) => send({ type: 'tool', name: t2.name, args: t2.args }),
             onReasoning: (t2) => {
               node.reasoning = (node.reasoning || '') + t2

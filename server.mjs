@@ -10,6 +10,7 @@ import { extract, kindOf } from './lib/extract.mjs'
 import * as store from './lib/store.mjs'
 import * as llm from './lib/llm.mjs'
 import { buildAskMessages, buildSummaryMessages, treeToMarkdown, execTool } from './lib/context.mjs'
+import { renderPageImage } from './lib/render.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SERVER_VERSION = (() => {
@@ -418,7 +419,13 @@ async function handleResume(req, res) {
   const node = tree.nodes[body.nodeId]
   if (!node) return json(res, 404, { error: '这条回答不存在' })
 
-  const messages = buildAskMessages({ doc, docs, tree, node })
+  let resumeImage = null
+  if (doc.kind === 'pdf') {
+    try {
+      resumeImage = await renderPageImage(doc, node.anchor?.page || 1)
+    } catch {}
+  }
+  const messages = buildAskMessages({ doc, docs, tree, node, image: resumeImage })
   messages.push({ role: 'assistant', content: node.answer || '（还没有任何内容）' })
   messages.push({
     role: 'user',
@@ -454,8 +461,11 @@ async function handleResume(req, res) {
       },
       {
         signal: ac.signal,
-        model: node.model || cfg.model,
-        exec: (name, args) => execTool(docs, doc.id, name, args),
+        model: resumeImage ? cfg.visionModel || node.model || cfg.model : node.model || cfg.model,
+        provider: resumeImage
+          ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat || cfg.apiFormat }
+          : null,
+        exec: (name, args) => execWithPageImages(docs, doc.id, name, args),
         onTool: (t) => sse({ type: 'tool', name: t.name, args: t.args }),
         onReasoning: (t) => {
           node.reasoning = (node.reasoning || '') + t
@@ -496,6 +506,22 @@ async function handleResume(req, res) {
   res.end()
 }
 
+async function execWithPageImages(docs, docId, name, args) {
+  const out = await execTool(docs, docId, name, args)
+  if (name === 'read_page' && args && args.page) {
+    let target = docs.find((d) => d.id === docId) || docs[0]
+    if (args.doc) {
+      const q = String(args.doc).toLowerCase()
+      target = docs.find((d) => (d.title || '').toLowerCase().includes(q)) || target
+    }
+    if (target && target.kind === 'pdf') {
+      const img = await renderPageImage(target, Number(args.page)).catch(() => null)
+      if (img) return { text: out, image: img }
+    }
+  }
+  return out
+}
+
 async function handleAsk(req, res) {
   const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
   const cfg = llm.readConfig()
@@ -525,9 +551,18 @@ async function handleAsk(req, res) {
 
   const tree = await store.getTree(body.docId)
   const id = crypto.randomBytes(6).toString('hex')
-  const useModel = body.image ? cfg.visionModel || cfg.model : cfg.model
-  const provider = body.image
-    ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat }
+  let pageImage = body.image || null
+  if (!pageImage && doc.kind === 'pdf') {
+    try {
+      pageImage = await renderPageImage(doc, body.anchor?.page || 1)
+    } catch (e) {
+      console.warn('[render]', e && e.message)
+    }
+  }
+  const hasImage = Boolean(pageImage)
+  const useModel = hasImage ? cfg.visionModel || cfg.model : cfg.model
+  const provider = hasImage
+    ? { baseUrl: cfg.visionBaseUrl || cfg.baseUrl, apiKey: cfg.visionApiKey || cfg.apiKey, format: cfg.visionFormat || cfg.apiFormat }
     : null
   const node = {
     id,
@@ -564,7 +599,7 @@ async function handleAsk(req, res) {
   res.on('close', () => ac.abort())
 
   try {
-    const messages = buildAskMessages({ docs, tree, node, image: body.image })
+    const messages = buildAskMessages({ docs, tree, node, image: pageImage })
     const usage = await llm.streamChatWithTools(
       messages,
       (d) => {
@@ -575,7 +610,7 @@ async function handleAsk(req, res) {
         signal: ac.signal,
         model: useModel,
         provider,
-        exec: (name, args) => execTool(docs, doc.id, name, args),
+        exec: (name, args) => execWithPageImages(docs, doc.id, name, args),
         onTool: (t) => sse({ type: 'tool', name: t.name, args: t.args }),
         onReasoning: (t) => {
           node.reasoning = (node.reasoning || '') + t

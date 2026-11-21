@@ -14,8 +14,8 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v100'
-const APP_VERSION = '1.0.10'
+const UI_VERSION = 'v106'
+const APP_VERSION = '1.0.11'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -611,7 +611,7 @@ async function relayoutPages() {
       layer.style.width = d.w + 'px'
       layer.style.height = d.h + 'px'
       const canvas = el.querySelector('canvas')
-      if (canvas.width !== 300) {
+      if (canvas.width > 0 && canvas.width !== 300) {
         await drawPage(n, el)
       }
     }
@@ -1131,6 +1131,7 @@ async function renderPdf() {
     },
     { root: scroller, rootMargin: '900px 0px' }
   )
+  S.pdfIO = io
 
   buildingPdf = true
   try {
@@ -1183,7 +1184,7 @@ async function drawPage(n, el, page) {
 
   const viewport = page.getViewport({ scale: pageScale(), rotation: (page.rotate + rotationNow()) % 360 })
   // 依据真实缩放与屏幕像素比渲染，避免放大后发虚
-  const dpr = Math.min(2, window.devicePixelRatio || 1)
+  const dpr = Math.min(1.5, window.devicePixelRatio || 1)
   canvas.width = Math.max(1, Math.floor(viewport.width * dpr))
   canvas.height = Math.max(1, Math.floor(viewport.height * dpr))
   canvas.style.width = Math.floor(viewport.width) + 'px'
@@ -1279,6 +1280,34 @@ function canvasBlank(canvas) {
 let healTimer = 0
 let healing = false
 
+function releaseFarCanvases() {
+  if (!S.doc || S.doc.kind !== 'pdf' || !S.pdf || buildingPdf) return
+  const sc = $('#page-scroll')
+  if (!sc) return
+  const root = sc.getBoundingClientRect()
+  const keep = 2400
+  for (const el of document.querySelectorAll('.page')) {
+    const c = el.querySelector('canvas')
+    if (!c || !c.width) continue
+    const r = el.getBoundingClientRect()
+    if (r.bottom < root.top - keep || r.top > root.bottom + keep) {
+      // 释放 canvas 的像素缓冲；文字层保留，选区和高亮不受影响
+      c.width = 0
+      c.height = 0
+      el.dataset.drawn = '0'
+      try {
+        S.pdfIO?.observe(el)
+      } catch {}
+    }
+  }
+}
+
+let releaseTimer = 0
+function scheduleRelease(delay = 500) {
+  clearTimeout(releaseTimer)
+  releaseTimer = setTimeout(releaseFarCanvases, delay)
+}
+
 function scheduleHeal(delay = 350, force = false) {
   clearTimeout(healTimer)
   healTimer = setTimeout(() => healBlankPages(force), delay)
@@ -1315,6 +1344,7 @@ async function healBlankPages(force = false) {
     }
     if (n) renderHighlights()
     if (left) scheduleHeal(300)
+    else scheduleRelease(200)
   } finally {
     healing = false
   }
@@ -1858,6 +1888,29 @@ async function consumeStream(res) {
 function scrollTreeEnd() {
   const box = $('#tree')
   box.scrollTop = box.scrollHeight
+}
+
+/* ================= 页面截图（移动端问图用） ================= */
+window.__dtPageImage = async (pageNo) => {
+  if (!S.doc || S.doc.kind !== 'pdf') return null
+  const n = Math.max(1, Number(pageNo) || 1)
+  const existing = document.querySelector(`.page[data-page="${n}"] canvas`)
+  if (existing && existing.width >= 900 && existing.closest('.page')?.dataset.drawn === '1') return existing.toDataURL('image/png')
+  if (!S.pdf) return null
+  try {
+    const page = await S.pdf.getPage(n)
+    const vp = page.getViewport({ scale: 1.3, rotation: (page.rotate + rotationNow()) % 360 })
+    const c = document.createElement('canvas')
+    c.width = Math.ceil(vp.width)
+    c.height = Math.ceil(vp.height)
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, c.width, c.height)
+    await page.render({ canvasContext: ctx, viewport: vp }).promise
+    return c.toDataURL('image/png')
+  } catch {
+    return null
+  }
 }
 
 /* ================= 截图 ================= */
@@ -2881,8 +2934,14 @@ function bind() {
     updateToolbar()
   })
   $('#page-scroll').addEventListener('scroll', onScrollerScroll, { passive: true })
-  $('#page-scroll').addEventListener('scroll', () => scheduleHeal(500), { passive: true })
-  $('#page-scroll').addEventListener('scrollend', () => scheduleHeal(120), { passive: true })
+  $('#page-scroll').addEventListener('scroll', () => {
+    scheduleRelease(600)
+    scheduleHeal(500)
+  }, { passive: true })
+  $('#page-scroll').addEventListener('scrollend', () => {
+    scheduleRelease(150)
+    scheduleHeal(120)
+  }, { passive: true })
   $('#pages').addEventListener('pointerdown', () => {
     if (S.doc && S.doc.kind === 'pdf') scheduleHeal(0)
   })
