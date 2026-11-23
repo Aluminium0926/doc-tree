@@ -1,7 +1,7 @@
 {
   "name": "doc-tree",
   "productName": "文档树",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "private": true,
   "description": "本地文档阅读器 + 锚定原文的追问树",
   "type": "module",
@@ -16,6 +16,7 @@
   "license": "MIT",
   "dependencies": {
     "@napi-rs/canvas": "^1.2.0",
+    "jszip": "^3.10.2",
     "katex": "^0.19.1",
     "mammoth": "^1.13.0",
     "marked": "^18.1.3",

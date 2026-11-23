@@ -6,11 +6,12 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
-import { extract, kindOf } from './lib/extract.mjs'
+import { extract, kindOf, SUPPORTED_EXT } from './lib/extract.mjs'
 import * as store from './lib/store.mjs'
 import * as llm from './lib/llm.mjs'
 import { buildAskMessages, buildSummaryMessages, treeToMarkdown, execTool } from './lib/context.mjs'
 import { renderPageImage } from './lib/render.mjs'
+import { pptToPdf } from './lib/office.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SERVER_VERSION = (() => {
@@ -168,8 +169,11 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/import' && req.method === 'POST') {
     const name = decodeURIComponent(req.headers['x-filename'] || 'document')
-    const buf = await readBody(req)
     const ext = path.extname(name).toLowerCase()
+    if (!SUPPORTED_EXT.has(ext)) {
+      return json(res, 415, { error: `暂不支持 ${ext || '这个格式'}，目前支持 PDF / Word / Markdown / TXT / PPTX` })
+    }
+    const buf = await readBody(req)
     const hash = crypto.createHash('sha256').update(buf).digest('hex')
 
     // 同一份文件再次导入（可能之前被移出列表）→ 复用原文档，提问树与上下文都还在
@@ -197,20 +201,33 @@ async function handleApi(req, res, url) {
       return json(res, 200, { doc: { id: revived.id, title: revived.title, kind: revived.kind, pages: revived.pages.length }, revived: true })
     }
 
-    const { kind, pages } = await extract(buf, ext)
+    let sourceBuf = buf
+    let sourceExt = ext
+    if (ext === '.ppt' || ext === '.pptx') {
+      try {
+        sourceBuf = await pptToPdf(buf, ext)
+        sourceExt = '.pdf'
+      } catch (e) {
+        if (ext === '.ppt') {
+          return json(res, 415, { error: '这个 .ppt 转换失败：' + String(e.message || e).slice(0, 160) + '。可以先用 PowerPoint 另存为 PDF 再导入。' })
+        }
+        // pptx 转换失败时退回纯文字提取
+      }
+    }
+    const { kind, pages } = await extract(sourceBuf, sourceExt)
     const id = crypto.randomBytes(6).toString('hex')
-    await store.saveFile(id, ext, buf)
+    await store.saveFile(id, sourceExt, sourceBuf)
     const doc = {
       id,
       title: path.basename(name, path.extname(name)) || '未命名文档',
       filename: name,
       kind,
-      ext,
+      ext: sourceExt,
       pages,
       summary: '',
       hash,
       hidden: false,
-      bytes: buf.length,
+      bytes: sourceBuf.length,
       createdAt: Date.now(),
       updatedAt: Date.now()
     }

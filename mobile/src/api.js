@@ -310,6 +310,9 @@ async function handleApi(path, init) {
     const name = decodeURIComponent(headerOf(init, 'x-filename') || 'document')
     const buf = await bodyBytes(init)
     const ext = (name.match(/\.[^.]+$/) || [''])[0].toLowerCase()
+    if (!['.pdf', '.docx', '.doc', '.md', '.markdown', '.txt', '.pptx'].includes(ext)) {
+      return json({ error: `暂不支持 ${ext || '这个格式'}，目前支持 PDF / Word / Markdown / TXT / PPTX` }, 415)
+    }
     // pdf.js 会把传入的 ArrayBuffer transfer 掉，先固化成 Blob 再解析
     const blob = new Blob([buf])
     const hash = await sha256hex(buf)

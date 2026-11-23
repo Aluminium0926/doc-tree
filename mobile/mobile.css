@@ -35,6 +35,7 @@
   }
   #app.mobile-lib-open #lib-backdrop { display: block; }
 
+  #btn-sidebar { display: none; }
   #btn-mobile-lib {
     display: grid;
     position: fixed;

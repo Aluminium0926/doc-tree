@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <meta name="theme-color" content="#0a0c11">
 <script src="/theme.js"></script>
-<link rel="stylesheet" href="/style.css?v=106">
+<link rel="stylesheet" href="/style.css?v=118">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <link id="hljs-theme" rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
 <script src="/vendor/highlight/highlight.min.js" defer></script>
@@ -22,10 +22,10 @@
       </div>
     </div>
     <label class="import">
-      <input type="file" id="file-input" accept=".pdf,.docx,.md,.markdown,.txt" multiple hidden>
+      <input type="file" id="file-input" accept=".pdf,.docx,.md,.markdown,.txt,.ppt,.pptx" multiple hidden>
       <span>＋ 导入文档</span>
     </label>
-    <div class="lib-tip">支持 PDF / Word / Markdown / TXT</div>
+    <div class="lib-tip">支持 PDF / Word / Markdown / TXT / PPT / PPTX（PPT 用本机 PowerPoint 转 PDF）</div>
     <div class="group-tools"><button id="btn-group">＋ 建组（多选文档）</button></div>
     <div id="group-bar" hidden>
       <span id="group-bar-count">已选 0 份</span>
@@ -222,7 +222,8 @@
 </div>
 
 <script src="/vendor/katex/katex.min.js"></script>
-<script type="module" src="/app.js?v=106"></script>
+<script src="/vendor/katex/mhchem.min.js"></script>
+<script type="module" src="/app.js?v=118"></script>
 <div id="theme-pop" class="theme-pop" hidden>
   <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
   <div class="tp-seg" id="tp-mode">

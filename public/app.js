@@ -14,8 +14,8 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v106'
-const APP_VERSION = '1.0.11'
+const UI_VERSION = 'v118'
+const APP_VERSION = '1.0.12'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -154,6 +154,28 @@ function sanitizeHtml(html) {
   return tpl.innerHTML
 }
 
+function stashBareChem(s, stash) {
+  const re = /\\(ce|pu)\s*\{/g
+  let out = ''
+  let last = 0
+  let m
+  while ((m = re.exec(s))) {
+    const start = m.index
+    let i = re.lastIndex
+    let depth = 1
+    while (i < s.length && depth > 0) {
+      if (s[i] === '{') depth++
+      else if (s[i] === '}') depth--
+      i++
+    }
+    if (depth > 0) break
+    out += s.slice(last, start) + stash(s.slice(start, i))
+    last = i
+    re.lastIndex = i
+  }
+  return out + s.slice(last)
+}
+
 function renderMarkdown(src) {
   const store = []
   const fences = []
@@ -178,6 +200,8 @@ function renderMarkdown(src) {
     return stash(inner.trim(), false)
   })
 
+  // 模型有时直接写 \ce{...} 而不包 $...$，这里补成行内公式
+  s = stashBareChem(s, (tex) => stash(tex, false))
   s = s.replace(/\u0001F(\d+)\u0001F/g, (_, i) => fences[+i])
 
   let html = marked.parse(s)
@@ -402,10 +426,14 @@ async function init() {
 
   initTheme()
   applySavedWidths()
-  setLeftCollapsed(localStorage.getItem('dt:left') === '1', false)
-  await loadState()
-  renderLibrary()
-  maybeWelcome()
+  const savedLeft = localStorage.getItem('dt:left')
+  // 窄窗口首次打开时默认收起左栏，避免一进来就三栏挤在一起；用户手动展开后会记住
+  if (savedLeft === null && window.innerWidth < 980) setLeftCollapsed(true, false)
+  else setLeftCollapsed(savedLeft === '1', false)
+  if (await loadStateWithRetry()) {
+    renderLibrary()
+    maybeWelcome()
+  }
   const qs = new URLSearchParams(location.search)
   const want = qs.get('doc') || localStorage.getItem('dt:last')
   if (want && S.docs.some((d) => d.id === want)) openDoc(want)
@@ -420,12 +448,7 @@ function setLeftCollapsed(v, persist = true) {
   app.classList.toggle('collapsed', v)
   if (persist) localStorage.setItem('dt:left', v ? '1' : '0')
 
-  if (v && !wasCollapsed) {
-    // 收起时不让右栏趁机变宽，把空间留给文档
-    app.style.setProperty('--right', Math.round(rNow) + 'px')
-  } else {
-    applySavedWidths()
-  }
+  applySavedWidths()
 
   clearTimeout(refitTimer)
   refitTimer = setTimeout(refitPdf, 280)
@@ -440,7 +463,9 @@ function applySavedWidths(fromCurrent = false) {
   let r = fromCurrent ? cols[2] : Number(localStorage.getItem('dt:rightw')) || DEFAULT_RIGHT
   const minViewer = 320
 
-  // 先压缩右栏，保证文档区至少 320px
+  // 窄窗口先限制右栏占比，否则收起左栏后文档区仍然很窄
+  if (W < 1180) r = Math.min(r, Math.max(280, Math.round(W * 0.38)))
+  // 再压缩右栏，保证文档区至少 320px
   r = Math.min(r, Math.max(260, Math.min(900, W - (collapsed ? 0 : l) - minViewer)))
   r = Math.max(260, r)
   // 再压缩左栏
@@ -619,6 +644,7 @@ async function relayoutPages() {
     relayoutBusy = false
     const max2 = Math.max(0, sc.scrollHeight - sc.clientHeight)
     sc.scrollTop = Math.round(ratio * max2)
+    scheduleHeal(0)
     if (relayoutAgain) {
       relayoutAgain = false
       relayoutPages()
@@ -645,9 +671,29 @@ function checkStaleServer() {
   el.hidden = false
 }
 
+async function loadStateWithRetry() {
+  let last = null
+  for (let i = 0; i < 6; i++) {
+    try {
+      await loadState()
+      return true
+    } catch (e) {
+      last = e
+      setStatus('数据加载失败，正在重试 ' + (i + 1) + '/6…')
+      await new Promise((r) => setTimeout(r, 700))
+    }
+  }
+  setStatus('')
+  toast('数据加载失败：' + (last?.message || '服务端未响应') + '。请完全退出应用后重新打开。', 'error')
+  return false
+}
+
 async function loadState() {
-  const r = await fetch('/api/state').then((x) => x.json())
-  S.docs = r.docs || []
+  const res = await fetch('/api/state')
+  if (!res.ok) throw new Error('服务端返回 ' + res.status)
+  const r = await res.json()
+  if (!Array.isArray(r.docs)) throw new Error('返回数据不完整')
+  S.docs = r.docs
   S.groups = r.groups || []
   S.flags = r.flags || {}
   S.cfg = r.config || {}
@@ -941,6 +987,15 @@ async function createGroupFromSelection() {
 
 async function importFiles(files) {
   for (const f of files) {
+    const ext = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase()
+    if (!/\.(pdf|docx?|md|markdown|txt|pptx?)$/.test(ext)) {
+      toast(`暂不支持 ${ext || '这个格式'}，目前支持 PDF / Word / Markdown / TXT / PPTX`)
+      continue
+    }
+    if (f.size > 150 * 1024 * 1024) {
+      toast('文件超过 150MB，建议先压缩或导出成 PDF')
+      continue
+    }
     setStatus(`解析中：${f.name}`)
     try {
       const r = await fetch('/api/import', {
@@ -1184,7 +1239,8 @@ async function drawPage(n, el, page) {
 
   const viewport = page.getViewport({ scale: pageScale(), rotation: (page.rotate + rotationNow()) % 360 })
   // 依据真实缩放与屏幕像素比渲染，避免放大后发虚
-  const dpr = Math.min(1.5, window.devicePixelRatio || 1)
+  // 缩小查看时文字很小，保留完整屏幕像素比；放大到 120% 以上再限制，兼顾清晰度和内存
+  const dpr = Math.min(window.devicePixelRatio || 1, S.zoom > 1.2 ? 1.5 : 2)
   canvas.width = Math.max(1, Math.floor(viewport.width * dpr))
   canvas.height = Math.max(1, Math.floor(viewport.height * dpr))
   canvas.style.width = Math.floor(viewport.width) + 'px'
@@ -1357,7 +1413,7 @@ function renderTextDoc() {
   sheet.className = 'sheet'
   sheet.id = 'sheet'
   sheet.style.zoom = S.zoom
-  if (S.doc.kind === 'md') {
+  if (S.doc.kind === 'md' || S.doc.kind === 'pptx') {
     sheet.innerHTML = renderMarkdown(text)
     enhanceCodeBlocks(sheet)
   } else {
@@ -2460,8 +2516,10 @@ function collectMatches(q) {
   for (const p of S.doc?.pages || []) {
     const hay = (p.text || '').toLowerCase()
     let i = 0
+    let ordinal = 0
     while (out.length < 800 && (i = hay.indexOf(needle, i)) !== -1) {
-      out.push({ page: p.no })
+      out.push({ page: p.no, ordinal })
+      ordinal++
       i += Math.max(1, needle.length)
     }
   }
@@ -2491,7 +2549,7 @@ async function jumpMatch(dir) {
   if (S.doc.kind === 'pdf') {
     gotoPage(m.page)
     const pageEl = await waitPageRendered(m.page)
-    paintInPage(pageEl, q)
+    paintInPage(pageEl, q, m.ordinal || 0)
     pageEl?.scrollIntoView({ block: 'center' })
   } else {
     paintInSheet(q)
@@ -2508,13 +2566,12 @@ async function waitPageRendered(n, timeout = 2500) {
   return document.querySelector(`.page[data-page="${n}"]`)
 }
 
-function paintRects(container, rects) {
-  container.querySelectorAll('.search-hit').forEach((x) => x.remove())
+function paintRects(container, rects, active = false) {
   const cr = container.getBoundingClientRect()
   for (const r of rects) {
     if (!r.width || !r.height) continue
     const d = document.createElement('div')
-    d.className = 'search-hit'
+    d.className = 'search-hit' + (active ? ' current' : '')
     d.style.left = ((r.left - cr.left) / cr.width) * 100 + '%'
     d.style.top = ((r.top - cr.top) / cr.height) * 100 + '%'
     d.style.width = (r.width / cr.width) * 100 + '%'
@@ -2523,7 +2580,7 @@ function paintRects(container, rects) {
   }
 }
 
-function paintInPage(pageEl, q) {
+function paintInPage(pageEl, q, activeOrdinal = 0) {
   if (!pageEl) return
   document.querySelectorAll('.page .search-hit').forEach((x) => x.remove())
   const layer = pageEl.querySelector('.textLayer')
@@ -2535,20 +2592,29 @@ function paintInPage(pageEl, q) {
     starts.push(text.length)
     text += s.textContent
   }
-  const i = text.toLowerCase().indexOf(q.toLowerCase())
-  if (i < 0) return
-  const end = i + q.length
-  let si = 0
-  while (si + 1 < spans.length && starts[si + 1] <= i) si++
-  let ei = si
-  while (ei + 1 < spans.length && starts[ei + 1] < end) ei++
-  const sNode = spans[si]?.firstChild
-  const eNode = spans[ei]?.firstChild
-  if (!sNode || !eNode) return
-  const range = document.createRange()
-  range.setStart(sNode, Math.max(0, i - starts[si]))
-  range.setEnd(eNode, Math.min(eNode.length, end - starts[ei]))
-  paintRects(pageEl, [...range.getClientRects()])
+  const low = text.toLowerCase()
+  const ql = q.toLowerCase()
+  let i = 0
+  let ordinal = 0
+  while (ordinal < 200 && (i = low.indexOf(ql, i)) !== -1) {
+    const end = i + q.length
+    let si = 0
+    while (si + 1 < spans.length && starts[si + 1] <= i) si++
+    let ei = si
+    while (ei + 1 < spans.length && starts[ei + 1] < end) ei++
+    const sNode = spans[si]?.firstChild
+    const eNode = spans[ei]?.firstChild
+    if (sNode && eNode) {
+      const range = document.createRange()
+      try {
+        range.setStart(sNode, Math.max(0, i - starts[si]))
+        range.setEnd(eNode, Math.min(eNode.length, end - starts[ei]))
+        paintRects(pageEl, [...range.getClientRects()], ordinal === activeOrdinal)
+      } catch {}
+    }
+    ordinal++
+    i += Math.max(1, q.length)
+  }
 }
 
 function paintInSheet(q) {
@@ -2574,7 +2640,7 @@ function paintInSheet(q) {
   const range = document.createRange()
   range.setStart(nodes[si], Math.max(0, i - starts[si]))
   range.setEnd(nodes[ei], Math.min(nodes[ei].length, end - starts[ei]))
-  paintRects(sheet, [...range.getClientRects()])
+  paintRects(sheet, [...range.getClientRects()], true)
   range.startContainer.parentElement?.scrollIntoView({ block: 'center' })
 }
 
