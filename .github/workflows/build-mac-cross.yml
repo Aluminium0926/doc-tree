@@ -91,11 +91,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="mac-$ARCH-v1.0.9"
+          TAG="mac-$ARCH-v1.0.10"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "release-mac/DocTree-mac-$ARCH.zip" --clobber
           else
             gh release create "$TAG" "release-mac/DocTree-mac-$ARCH.zip" \
-              --title "DocTree macOS $ARCH v1.0.9" \
-              --notes "macOS 版（$ARCH），在 Ubuntu 上交叉构建，未签名未公证。解压后双击「首次打开.command」，它会自动去隔离、做本地临时签名并启动。"
+              --title "DocTree macOS $ARCH v1.0.10" \
+              --notes "macOS 版（$ARCH），在 Ubuntu 上交叉构建，未签名未公证。解压后双击「首次打开.command」，它会自动去隔离、做本地临时签名并启动。\n\n本版起支持 PPT/PPTX 自动转 PDF：优先 LibreOffice，否则调用本机 Microsoft PowerPoint（首次会请求自动化权限）。"
           fi

@@ -20,7 +20,7 @@
 | **安卓** | 下载 `android-v1.0.11` 里的 `DocTree-android.apk` | 独立 App，2.6 MB，无需联网服务端 |
 | **鸿蒙 NEXT** | 用系统自带的**卓易通**安装同一个 APK；不装就用上面的网页版 | 卓易通提供安卓运行时，装完 APK 可当普通 App 用 |
 | **Windows** | 下载 `DocTree-1.0.12-win32-x64.zip`，双击 `start-doctree.vbs` | 便携版，中文路径也能用 |
-| **macOS** | 下载 `mac-arm64-v1.0.9` / `mac-x64-v1.0.9` 里的 zip，解压后双击 `首次打开.command` | 未公证，首次需右键「打开」 |
+| **macOS** | 下载 `mac-arm64-v1.0.10` / `mac-x64-v1.0.10` 里的 zip，解压后双击 `首次打开.command` | 未公证，首次需右键「打开」 |
 | 开发者 | `npm install && npm start` | 起本地服务端，`HOST=0.0.0.0` 可让局域网手机访问 |
 
 ### 网页版最省事
@@ -61,6 +61,9 @@
 
 ## 最近更新
 
+- **macOS v1.0.10**
+  - PPT/PPTX 自动转 PDF：优先 LibreOffice，没有则调用 Microsoft PowerPoint（首次需允许自动化）
+  - 其余与桌面 v1.0.12 一致
 - **v1.0.12**
   - PPT/PPTX 用本机 PowerPoint 转 PDF，保留版式和图片；PPTX 文字兜底
   - 化学式 \ce{} 渲染（mhchem），裸写法自动补公式
@@ -134,8 +137,8 @@
 | 产物 | Release |
 |---|---|
 | `DocTree-android.apk` | [android-v1.0.11](https://github.com/Aluminium0926/doc-tree/releases/tag/android-v1.0.11) |
-| `DocTree-mac-arm64.zip`（Apple Silicon） | [mac-arm64-v1.0.9](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.9) |
-| `DocTree-mac-x64.zip`（Intel Mac） | [mac-x64-v1.0.9](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.9) |
+| `DocTree-mac-arm64.zip`（Apple Silicon） | [mac-arm64-v1.0.10](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.10) |
+| `DocTree-mac-x64.zip`（Intel Mac） | [mac-x64-v1.0.10](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.10) |
 | `DocTree-web-v1.0.9.zip`（静态包，自建托管用） | [web-v1.0.9](https://github.com/Aluminium0926/doc-tree/releases/tag/web-v1.0.9) |
 | `DocTree-1.0.12-win32-x64.zip`（Windows 便携版） | [v1.0.12](https://github.com/Aluminium0926/doc-tree/releases/tag/v1.0.12) |
 
@@ -214,8 +217,8 @@ npm run dist    # 用 electron-packager 打包到 release/
 三种方式，按省事程度排：
 
 1. **现成安装包**（推荐）
-   - Apple Silicon：[mac-arm64-v1.0.9](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.9) → `DocTree-mac-arm64.zip`
-   - Intel：[mac-x64-v1.0.9](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.9) → `DocTree-mac-x64.zip`
+   - Apple Silicon：[mac-arm64-v1.0.10](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-arm64-v1.0.10) → `DocTree-mac-arm64.zip`
+   - Intel：[mac-x64-v1.0.10](https://github.com/Aluminium0926/doc-tree/releases/tag/mac-x64-v1.0.10) → `DocTree-mac-x64.zip`
 
    解压后**双击「首次打开.command」**：它会自动去掉隔离标记、做本地临时签名，然后启动。
 

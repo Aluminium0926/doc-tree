@@ -14,8 +14,8 @@ const trunc = (s, n) => {
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v118'
-const APP_VERSION = '1.0.12'
+const UI_VERSION = 'v119'
+const APP_VERSION = '1.0.13'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
