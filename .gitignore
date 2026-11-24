@@ -21,3 +21,8 @@ snapshots/*.zip
 /*.jpg
 scripts/*.png
 scripts/*.pdf
+
+mobile-build/
+wasm/
+ppt-lab/
+
