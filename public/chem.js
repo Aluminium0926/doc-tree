@@ -3,9 +3,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 const RDKIT_BASE = VENDOR + 'rdkit/'
 
 let rdkitPromise = null
-let queue = []
-let running = false
 const molCache = new Map()
+const MAX_MOL_CACHE = 200
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -244,6 +243,7 @@ async function moleculeSvg(source, bond = 18) {
   })
   const best = candidates[0]
   molCache.set(key, best)
+  if (molCache.size > MAX_MOL_CACHE) molCache.delete(molCache.keys().next().value)
   return best
 }
 

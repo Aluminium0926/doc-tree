@@ -1,223 +1,20 @@
-import { marked } from './vendor/marked.esm.js'
-import { enhanceChemBlocks } from './chem.js?v=1.0.42'
-marked.setOptions({ gfm: true, breaks: true })
+import { enhanceChemBlocks } from './chem.js?v=1.0.43'
+import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
+import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
+import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
+import { readSSE } from './modules/sse.js'
+import './modules/focus.js' // 焦点管理：副作用导入，自己注册监听
 
 // 静态资源基址：兼容「根路径」和「子路径部署」（如 GitHub Pages /doc-tree/）
 const VENDOR = new URL('./vendor/', import.meta.url).href
 
-const $ = (s, r = document) => r.querySelector(s)
-const esc = (s) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-const trunc = (s, n) => {
-  s = String(s || '')
-  return s.length > n ? s.slice(0, n) + '…' : s
-}
-
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v152'
-const APP_VERSION = '1.0.42'
+const UI_VERSION = 'v153'
+const APP_VERSION = '1.0.43'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
-
-let hljsPromise = null
-function ensureHljs() {
-  if (window.hljs) return Promise.resolve(window.hljs)
-  hljsPromise ??= new Promise((resolve, reject) => {
-    const s = document.createElement('script')
-    s.src = `${VENDOR}highlight/highlight.min.js`
-    s.onload = () => resolve(window.hljs)
-    s.onerror = () => reject(new Error('highlight.js 加载失败'))
-    document.head.appendChild(s)
-  })
-  return hljsPromise
-}
-
-const EXT_BY_LANG = {
-  python: 'py', py: 'py', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts',
-  bash: 'sh', shell: 'sh', sh: 'sh', zsh: 'sh', json: 'json', html: 'html', xml: 'xml',
-  css: 'css', sql: 'sql', java: 'java', kotlin: 'kt', c: 'c', cpp: 'cpp', 'c++': 'cpp',
-  csharp: 'cs', 'c#': 'cs', go: 'go', rust: 'rs', ruby: 'rb', php: 'php', swift: 'swift',
-  yaml: 'yml', yml: 'yml', markdown: 'md', md: 'md', diff: 'diff', plaintext: 'txt', text: 'txt'
-}
-
-// 把 <pre><code> 变成带语言标签、复制/下载按钮的代码卡片（对齐 DeepSeek 的样式）
-function enhanceCodeBlocks(root) {
-  if (!root) return
-  const pres = [...root.querySelectorAll('pre')].filter((p) => !p.closest('.code-card') && p.querySelector('code'))
-  if (!pres.length) return
-  const codes = []
-  for (const pre of pres) {
-    const code = pre.querySelector('code')
-    const lang = (code.className.match(/(?:language|lang)-([\w+#.-]+)/) || [])[1] || ''
-    const card = document.createElement('div')
-    card.className = 'code-card'
-    const head = document.createElement('div')
-    head.className = 'code-head'
-    const label = document.createElement('span')
-    label.className = 'code-lang'
-    label.textContent = lang || 'text'
-    const actions = document.createElement('div')
-    actions.className = 'code-actions'
-
-        const ICON_COPY = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5.5 14.5V6A2.5 2.5 0 0 1 8 3.5h8.5"/></svg>'
-    const ICON_DOWN = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="m8 10.5 4 4 4-4"/><path d="M4.5 19.5h15"/></svg>'
-    const copyBtn = document.createElement('button')
-    copyBtn.type = 'button'
-    copyBtn.className = 'code-btn'
-    copyBtn.innerHTML = ICON_COPY + '<span>复制</span>'
-    copyBtn.addEventListener('click', async () => {
-      const text = code.innerText
-      try {
-        await navigator.clipboard.writeText(text)
-      } catch {
-        const ta = document.createElement('textarea')
-        ta.value = text
-        ta.style.position = 'fixed'
-        ta.style.opacity = '0'
-        document.body.appendChild(ta)
-        ta.select()
-        try {
-          document.execCommand('copy')
-        } catch {}
-        ta.remove()
-      }
-      copyBtn.querySelector('span').textContent = '已复制'
-      setTimeout(() => (copyBtn.querySelector('span').textContent = '复制'), 1200)
-    })
-
-    const dlBtn = document.createElement('button')
-    dlBtn.type = 'button'
-    dlBtn.className = 'code-btn'
-    dlBtn.innerHTML = ICON_DOWN + '<span>下载</span>'
-    dlBtn.addEventListener('click', () => {
-      const ext = EXT_BY_LANG[lang] || 'txt'
-      const blob = new Blob([code.innerText], { type: 'text/plain;charset=utf-8' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `code.${ext}`
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000)
-    })
-
-    actions.append(copyBtn, dlBtn)
-    head.append(label, actions)
-    pre.replaceWith(card)
-    card.append(head, pre)
-    codes.push(code)
-  }
-
-  const highlight = (h) => {
-    if (!h) return
-    for (const code of codes) {
-      try {
-        h.highlightElement(code)
-      } catch {}
-    }
-  }
-  if (window.hljs) highlight(window.hljs)
-  else ensureHljs().then(highlight).catch(() => {})
-}
-
-// 先抽出公式占位，Markdown 渲染完再交给 KaTeX，避免换行/<br> 把 $$ 块切碎
-
-// 轻量 HTML 清洗：保留排版/公式，去掉脚本、事件属性与危险 URL
-const DROP_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'input', 'button', 'textarea', 'select', 'video', 'audio', 'source', 'track'])
-function sanitizeHtml(html) {
-  const tpl = document.createElement('template')
-  tpl.innerHTML = html
-  const walk = (node) => {
-    for (const el of [...node.children]) {
-      const tag = el.tagName.toLowerCase()
-      if (DROP_TAGS.has(tag)) {
-        el.remove()
-        continue
-      }
-      for (const attr of [...el.attributes]) {
-        const n = attr.name.toLowerCase()
-        const v = attr.value || ''
-        if (n.startsWith('on') || n === 'srcdoc' || n === 'formaction') {
-          el.removeAttribute(attr.name)
-          continue
-        }
-        if (n === 'style') {
-          if (/url\s*\(|expression\s*\(|javascript:/i.test(v)) el.removeAttribute('style')
-          continue
-        }
-        if ((n === 'href' || n === 'xlink:href') && /^\s*(javascript|vbscript|data):/i.test(v)) el.removeAttribute(attr.name)
-        if (n === 'src' && !/^(https?:|data:image\/|\/|\.\/|blob:)/i.test(v)) el.removeAttribute(attr.name)
-      }
-      walk(el)
-    }
-  }
-  walk(tpl.content)
-  return tpl.innerHTML
-}
-
-function stashBareChem(s, stash) {
-  const re = /\\(ce|pu)\s*\{/g
-  let out = ''
-  let last = 0
-  let m
-  while ((m = re.exec(s))) {
-    const start = m.index
-    let i = re.lastIndex
-    let depth = 1
-    while (i < s.length && depth > 0) {
-      if (s[i] === '{') depth++
-      else if (s[i] === '}') depth--
-      i++
-    }
-    if (depth > 0) break
-    out += s.slice(last, start) + stash(s.slice(start, i))
-    last = i
-    re.lastIndex = i
-  }
-  return out + s.slice(last)
-}
-
-function renderMarkdown(src) {
-  const store = []
-  const fences = []
-  let s = String(src || '')
-
-  s = s.replace(/```[\s\S]*?```/g, (m) => {
-    fences.push(m)
-    return `\u0001F${fences.length - 1}\u0001F`
-  })
-
-  const stash = (tex, display) => {
-    store.push({ tex, display })
-    return `%%M${store.length - 1}%%`
-  }
-
-  s = s.replace(/\$\$([\s\S]+?)\$\$/g, (_, m) => stash(m.trim(), true))
-  s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_, m) => stash(m.trim(), true))
-  s = s.replace(/\\\(([\s\S]+?)\\\)/g, (_, m) => stash(m.trim(), false))
-  s = s.replace(/\$([^$\n]+?)\$/g, (m, inner) => {
-    // 货币写法通常带空格（"$5 and $10"），公式一般紧贴 $；据此排除
-    if (/^\s|\s$/.test(inner)) return m
-    return stash(inner.trim(), false)
-  })
-
-  // 模型有时直接写 \ce{...} 而不包 $...$，这里补成行内公式
-  s = stashBareChem(s, (tex) => stash(tex, false))
-  s = s.replace(/\u0001F(\d+)\u0001F/g, (_, i) => fences[+i])
-
-  let html = marked.parse(s)
-  html = html.replace(/%%M(\d+)%%/g, (_, i) => {
-    const it = store[+i]
-    if (!it) return ''
-    if (!window.katex) return `<code>${it.tex}</code>`
-    try {
-      return window.katex.renderToString(it.tex, { displayMode: it.display, throwOnError: false })
-    } catch {
-      return `<code>${it.tex}</code>`
-    }
-  })
-  return sanitizeHtml(html)
-}
 
 const S = {
   cfg: null,
@@ -402,7 +199,7 @@ function maybeWelcome() {
       localStorage.setItem('dt:seenWelcome', '1')
     } catch {}
     try {
-      await fetch('/api/flags', {
+      await apiFetch('/api/flags', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ welcomeSeen: true })
@@ -692,7 +489,7 @@ async function loadStateWithRetry() {
 }
 
 async function loadState() {
-  const res = await fetch('/api/state')
+  const res = await apiFetch('/api/state')
   if (!res.ok) throw new Error('服务端返回 ' + res.status)
   const r = await res.json()
   if (!Array.isArray(r.docs)) throw new Error('返回数据不完整')
@@ -763,7 +560,7 @@ function docRow(d, inGroup) {
     e.stopPropagation()
     const g = (S.groups || []).find((x) => x.docIds.includes(d.id))
     if (!g) return
-    const r = await fetch('/api/group/update', {
+    const r = await apiFetch('/api/group/update', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ id: g.id, remove: [d.id] })
@@ -776,7 +573,7 @@ function docRow(d, inGroup) {
   el.querySelector('.x')?.addEventListener('click', async (e) => {
     e.stopPropagation()
     if (!(await confirmRemove(d.title))) return
-    await fetch(`/api/doc/${d.id}`, { method: 'DELETE' })
+    await apiFetch(`/api/doc/${d.id}`, { method: 'DELETE' })
     if (S.doc && S.doc.id === d.id) resetViewer()
     await loadState()
     renderLibrary()
@@ -843,7 +640,7 @@ function renderLibrary() {
         done = true
         const val = input.value.trim()
         if (save && val && val !== g.name) {
-          await fetch('/api/group/update', {
+          await apiFetch('/api/group/update', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ id: g.id, name: val })
@@ -867,7 +664,7 @@ function renderLibrary() {
     row.querySelector('.g-x').addEventListener('click', async (e) => {
       e.stopPropagation()
       if (!confirm(`解散「${g.name}」？\n提问树会复制给组内每份文档，内容不会丢。`)) return
-      await fetch('/api/group/dissolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: g.id }) })
+      await apiFetch('/api/group/dissolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: g.id }) })
       await loadState()
       renderLibrary()
       toast('已解散，提问树已复制到各文档')
@@ -900,14 +697,14 @@ function renderLibrary() {
         <button class="x" title="彻底删除（含提问树）">✕</button>`
       el.querySelector('.restore').addEventListener('click', async (e) => {
         e.stopPropagation()
-        await fetch('/api/doc/restore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: d.id }) })
+        await apiFetch('/api/doc/restore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: d.id }) })
         await loadState()
         renderLibrary()
       })
       el.querySelector('.x').addEventListener('click', async (e) => {
         e.stopPropagation()
         if (!confirm(`彻底删除《${d.title}》及其提问树？\n此操作不可恢复。`)) return
-        await fetch('/api/doc/purge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: d.id }) })
+        await apiFetch('/api/doc/purge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: d.id }) })
         await loadState()
         renderLibrary()
       })
@@ -958,7 +755,7 @@ async function createGroupFromSelection() {
   if (!ids.length) return toast('先选文档')
   const target = S.groupTarget
   if (target) {
-    const r = await fetch('/api/group/update', {
+    const r = await apiFetch('/api/group/update', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ id: target, add: ids })
@@ -973,7 +770,7 @@ async function createGroupFromSelection() {
   }
   if (ids.length < 2) return toast('至少选两份文档')
   const name = ($('#group-name')?.value || '').trim() || `组 ${(S.groups || []).length + 1}`
-  const r = await fetch('/api/group', {
+  const r = await apiFetch('/api/group', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name, docIds: ids })
@@ -1024,7 +821,7 @@ async function importFiles(files) {
 
     setStatus(`解析中：${target.name}`)
     try {
-      const r = await fetch('/api/import', {
+      const r = await apiFetch('/api/import', {
         method: 'POST',
         headers: { 'x-filename': encodeURIComponent(target.name) },
         body: await target.arrayBuffer()
@@ -1083,7 +880,7 @@ function openInstrPop() {
     del.textContent = '✕'
     del.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const r = await fetch('/api/instruction/remove', {
+      const r = await apiFetch('/api/instruction/remove', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ docId: S.doc.id, index: i })
@@ -1106,7 +903,7 @@ function openInstrPop() {
 
 async function clearInstructions() {
   if (!S.doc) return
-  const r = await fetch('/api/instruction/remove', {
+  const r = await apiFetch('/api/instruction/remove', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ docId: S.doc.id, clear: true })
@@ -1133,12 +930,16 @@ function resetViewer() {
   renderTree()
 }
 
+let docOpenSeq = 0
+
 async function openDoc(id) {
+  const seq = ++docOpenSeq
   if (S.doc) saveViewState(S.doc.id)
   beginDocSwitch()
   viewRestoring = true
   setStatus('加载中…')
-  const r = await fetch(`/api/doc/${id}`).then((x) => x.json())
+  const r = await apiFetch(`/api/doc/${id}`).then((x) => x.json())
+  if (seq !== docOpenSeq) return // 用户又点了别的文档，这次结果作废
   if (r.error) {
     viewRestoring = false
     endDocSwitch()
@@ -1165,9 +966,10 @@ async function openDoc(id) {
   $('#pages').innerHTML = ''
   updateZoomLabel()
   setStatus('')
-  if (S.doc.kind === 'pdf') await renderPdf()
+  if (S.doc.kind === 'pdf') await renderPdf(seq)
   else if (S.doc.kind === 'image') await renderImageDoc()
   else renderTextDoc()
+  if (seq !== docOpenSeq) return
   updateToolbar()
   if (savedView) restoreViewState(id, savedView, endDocSwitch)
   else requestAnimationFrame(() => requestAnimationFrame(endDocSwitch))
@@ -1273,7 +1075,7 @@ $('#tree')?.addEventListener('scroll', scheduleViewSave, { passive: true })
 
 
 /* ================= PDF 渲染 ================= */
-async function renderPdf() {
+async function renderPdf(seq = docOpenSeq) {
   S.pdfjs ??= await import(VENDOR + 'pdf.min.mjs?v=4.10.38')
   S.pdfjs.GlobalWorkerOptions.workerSrc = VENDOR + 'pdf.worker.wrapper.mjs?v=4.10.38'
   const src = window.DT_LOCAL ? await window.DTLocal.fileUrl(S.doc.id) : `/api/file/${S.doc.id}`
@@ -1282,6 +1084,12 @@ async function renderPdf() {
     cMapUrl: VENDOR + 'cmaps/',
     cMapPacked: true
   }).promise
+  if (seq !== docOpenSeq) {
+    try {
+      await pdf.destroy()
+    } catch {}
+    return
+  }
   S.pdf = pdf
 
   const first = await pdf.getPage(1)
@@ -1327,6 +1135,7 @@ async function renderPdf() {
   buildingPdf = true
   try {
     for (let n = 1; n <= pdf.numPages; n++) {
+      if (seq !== docOpenSeq) return // 已经切到别的文档，别再往 #pages 里塞页
       const page = await pdf.getPage(n)
       const v = page.getViewport({ scale: pageScale(), rotation: (page.rotate + rotationNow()) % 360 })
       const el = document.createElement('div')
@@ -1746,6 +1555,70 @@ function renderTree({ preserve = true } = {}) {
   }
 }
 
+/* ---------- 增量更新：提问流式返回时只动一个节点，不再整棵树重建 ---------- */
+function kidsMap() {
+  const kids = new Map()
+  for (const n of Object.values(S.tree.nodes || {})) {
+    const k = n.parentId || 'root'
+    if (!kids.has(k)) kids.set(k, [])
+    kids.get(k).push(n)
+  }
+  for (const arr of kids.values()) arr.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+  return kids
+}
+
+function nodeDepth(id) {
+  let d = 0
+  let cur = S.tree.nodes[id]
+  while (cur && cur.parentId && d < 40) {
+    d++
+    cur = S.tree.nodes[cur.parentId]
+  }
+  return d
+}
+
+function syncTreeMeta() {
+  const nodes = Object.values(S.tree.nodes || {})
+  const count = $('#node-count')
+  if (count) count.textContent = nodes.length ? `(${nodes.length})` : ''
+  const locate = $('#btn-locate')
+  if (locate) locate.hidden = !nodes.length
+  if (!nodes.length) {
+    const root = $('#tree')
+    if (root) root.innerHTML = '<div class="tree-empty">还没有追问。<br>在文档里选中一段文字试试。</div>'
+  }
+  syncTreeGap()
+}
+
+function appendNodeEl(n) {
+  const root = $('#tree')
+  if (!root) return
+  const kids = kidsMap()
+  const el = nodeEl(n, nodeDepth(n.id), kids)
+  if (!n.parentId) {
+    if (!root.querySelector('.node')) root.innerHTML = ''
+    root.appendChild(el)
+  } else {
+    const parentEl = document.querySelector(`.node[data-id="${n.parentId}"]`)
+    if (!parentEl) return renderTree()
+    let box = parentEl.querySelector(':scope > .children')
+    if (!box) {
+      box = document.createElement('div')
+      box.className = 'children'
+      parentEl.appendChild(box)
+    }
+    box.appendChild(el)
+  }
+  syncTreeMeta()
+}
+
+function refreshNodeEl(n) {
+  const el = document.querySelector(`.node[data-id="${n.id}"]`)
+  if (!el) return renderTree()
+  el.replaceWith(nodeEl(n, nodeDepth(n.id), kidsMap()))
+  syncTreeMeta()
+}
+
 function nodeEl(n, depth, kids) {
   const hasKids = (kids.get(n.id) || []).length > 0
   const el = document.createElement('div')
@@ -1819,7 +1692,7 @@ function nodeEl(n, depth, kids) {
   card.appendChild(usageEl)
   acts.querySelector('[data-act="del"]').addEventListener('click', async () => {
     if (!confirm('删除这条追问及其子分支？')) return
-    await fetch('/api/node/delete', {
+    await apiFetch('/api/node/delete', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ docId: S.doc.id, nodeId: n.id })
@@ -1898,7 +1771,7 @@ async function sendInstruction(text) {
   if (!S.doc) return toast('先打开一份文档')
   setStatus('指令发送中…')
   try {
-    const r = await fetch('/api/instruction', {
+    const r = await apiFetch('/api/instruction', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ docId: S.doc.id, text })
@@ -1906,6 +1779,7 @@ async function sendInstruction(text) {
     const j = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(j.error || '指令发送失败')
     $('#q').value = ''
+    autoGrowComposer()
     setInstrMode(false)
     toast(j.count === 0 ? '已清除所有指令' : j.reply ? `指令已生效：${j.reply}` : '指令已生效')
     // 当前打开文档的指令数要立刻反映到标题下面，不用重新打开
@@ -1958,7 +1832,7 @@ async function send(forced) {
   S.abort = ac
 
   try {
-    const res = await fetch('/api/ask', {
+    const res = await apiFetch('/api/ask', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ docId: S.doc.id, parentId, anchor, question: q, image, web: S.webSearch }),
@@ -1969,6 +1843,7 @@ async function send(forced) {
       throw new Error(j.error || `请求失败 ${res.status}`)
     }
     $('#q').value = ''
+    autoGrowComposer()
     S.pendingAnchor = null
     S.pendingParent = null
     S.pendingShot = null
@@ -1996,7 +1871,7 @@ async function send(forced) {
 async function refreshCurrentTree() {
   if (!S.doc) return
   try {
-    const d = await fetch('/api/doc/' + S.doc.id).then((r) => r.json())
+    const d = await apiFetch('/api/doc/' + S.doc.id).then((r) => r.json())
     if (d && d.tree) {
       S.tree = d.tree
       renderTree()
@@ -2013,7 +1888,7 @@ async function resumeNode(id) {
   const ac = new AbortController()
   S.abort = ac
   try {
-    const res = await fetch('/api/ask/resume', {
+    const res = await apiFetch('/api/ask/resume', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ docId: S.doc.id, nodeId: id }),
@@ -2040,16 +1915,15 @@ async function resumeNode(id) {
 }
 
 async function consumeStream(res) {
-  const reader = res.body.getReader()
-  const dec = new TextDecoder()
-  let buf = ''
   let node = null
 
   const handle = (ev) => {
     if (ev.type === 'meta') {
       node = ev.node
+      const isNew = !S.tree.nodes[node.id]
       S.tree.nodes[node.id] = node
-      renderTree()
+      if (isNew) appendNodeEl(node)
+      else refreshNodeEl(node)
       scrollTreeEnd()
     } else if (ev.type === 'reasoning' && node) {
       node.reasoning = (node.reasoning || '') + ev.text
@@ -2099,30 +1973,13 @@ async function consumeStream(res) {
       toast(ev.message)
     } else if (ev.type === 'done' && ev.node) {
       S.tree.nodes[ev.node.id] = ev.node
-      renderTree()
+      refreshNodeEl(ev.node)
       document.querySelector(`.node[data-id="${ev.node.id}"]`)?.scrollIntoView({ block: 'nearest' })
       setStatus('')
     }
   }
 
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buf += dec.decode(value, { stream: true })
-    let i
-    while ((i = buf.indexOf('\n\n')) >= 0) {
-      const frame = buf.slice(0, i)
-      buf = buf.slice(i + 2)
-      for (const line of frame.split('\n')) {
-        if (!line.startsWith('data:')) continue
-        const data = line.slice(5).trim()
-        if (!data) continue
-        try {
-          handle(JSON.parse(data))
-        } catch {}
-      }
-    }
-  }
+  await readSSE(res, handle)
 }
 
 function scrollTreeEnd() {
@@ -2220,6 +2077,18 @@ function onShotUp(e) {
 }
 
 /* ================= 杂项 UI ================= */
+// 输入框跟着内容长高（以前 rows=2 固定高度，长问题要在框里滚动）
+function autoGrowComposer() {
+  const q = $('#q')
+  if (!q) return
+  const min = 54
+  const max = 170
+  q.style.height = 'auto'
+  const h = Math.max(min, Math.min(max, q.scrollHeight))
+  q.style.height = h + 'px'
+  q.style.overflowY = q.scrollHeight > max ? 'auto' : 'hidden'
+}
+
 function updateChip() {
   const chip = $('#anchor-chip')
   const text = chip.querySelector('.chip-text')
@@ -2253,22 +2122,6 @@ function toast(msg, kind = 'ok') {
   t.hidden = false
   clearTimeout(toast._t)
   toast._t = setTimeout(() => (t.hidden = true), 3800)
-}
-
-function formatTokens(n) {
-  const v = Number(n) || 0
-  if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M'
-  if (v >= 1000) return (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k'
-  return String(v)
-}
-
-function usageLine(u) {
-  if (!u) return ''
-  const parts = []
-  if (u.input) parts.push(`输入 ${formatTokens(u.input)}`)
-  if (u.cacheHit) parts.push(`缓存 ${formatTokens(u.cacheHit)}`)
-  if (u.output) parts.push(`输出 ${formatTokens(u.output)}`)
-  return parts.join(' · ')
 }
 
 function clampZoom(z) {
@@ -2513,7 +2366,7 @@ async function openUsage() {
   const body = $('#usage-body')
   body.innerHTML = '<p class="usage-empty">加载中…</p>'
   try {
-    const data = await fetch('/api/usage').then((r) => r.json())
+    const data = await apiFetch('/api/usage').then((r) => r.json())
     const t = data.totals || {}
     const pct = Math.round((t.hitRate || 0) * 100)
     const fmt = (n) => formatTokens(n)
@@ -2555,7 +2408,7 @@ async function saveSettings() {
   }
   const vk = $('#cfg-vision-key').value.trim()
   if (vk) body.visionApiKey = vk
-  await fetch('/api/config', {
+  await apiFetch('/api/config', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
@@ -2634,7 +2487,7 @@ function saveHighlights() {
   S.hlSaveTimer = setTimeout(async () => {
     if (!S.doc) return
     try {
-      await fetch('/api/highlights', {
+      await apiFetch('/api/highlights', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ docId: S.doc.id, highlights: S.highlights })
@@ -2682,6 +2535,7 @@ function openSearch() {
 }
 
 function closeSearch() {
+  clearTimeout(searchTimer) // 防抖里还排着一次 runSearch，不清掉会在关掉后画出高亮并滚动页面
   $('#search-bar').hidden = true
   S.matches = []
   S.matchIdx = -1
@@ -3053,7 +2907,7 @@ function bind() {
   $('#effort').addEventListener('change', async () => {
     const i = Number($('#effort').value)
     S.cfg.effort = EFFORT_IDS[i]
-    await fetch('/api/config', {
+    await apiFetch('/api/config', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ effort: S.cfg.effort })
@@ -3066,6 +2920,8 @@ function bind() {
       send()
     }
   })
+  $('#q').addEventListener('input', autoGrowComposer)
+  setTimeout(autoGrowComposer, 0)
 
   document.addEventListener('mouseup', onMouseUp)
   document.addEventListener('mousedown', (e) => {
@@ -3380,203 +3236,3 @@ function bind() {
   })
 }
 
-/* ================= 输入框焦点管理（唯一入口） =================
- *
- * 规则只有一条：只要窗口是激活的、没有弹窗、没有别的文本框在用，
- * 焦点就必须在 #q 里。所有“操作类”交互结束后统一回到这里。
- *
- * 两个坑（都已实测）：
- *  1. Electron 里 document.hasFocus() 会误报 true：窗口没被激活时它也可能是 true，
- *     于是 q.focus() 成功、activeElement 是 #q，但系统光标不闪、键盘输入到不了渲染进程。
- *     → 窗口激活状态以主进程的 dt:win-state / dt:win-focus / dt:win-blur 为准。
- *  2. 中文输入法无法用 keydown 重放恢复（首键是 keyCode 229 / key:"Process"，
- *     后面全是 composition 事件，只会送到当前焦点元素）。
- *     → 不再重放字符，只保证焦点归位；焦点对了，输入法自然就对。
- */
-const DTFocus = (() => {
-  let known = false // 是否已从主进程拿到窗口激活状态
-  let active = true // 最近一次已知的窗口激活状态
-  let attempts = 0
-
-  const composer = () => document.querySelector('#q')
-
-  const TEXT_TYPES = new Set([
-    'text', 'search', 'email', 'url', 'tel', 'password', 'number',
-    'date', 'time', 'datetime-local', 'month', 'week'
-  ])
-
-  // 真正“能打字”的控件（range / checkbox / button 不算，它们不该挡住输入框）
-  function isTextual(el) {
-    if (!el) return false
-    if (el.isContentEditable) return true
-    if (el.tagName === 'TEXTAREA') return true
-    if (el.tagName !== 'INPUT') return false
-    return TEXT_TYPES.has((el.getAttribute('type') || 'text').toLowerCase())
-  }
-
-  function uiBlocks() {
-    if (document.querySelector('.modal:not([hidden])')) return true
-    const search = document.querySelector('#search-bar')
-    if (search && !search.hidden) return true
-    return false
-  }
-
-  function winActive() {
-    if (known) return active
-    // 浏览器 / 还没收到主进程消息时：hasFocus() 为 false 一定不可聚焦，为 true 不确定
-    return document.hasFocus() !== false
-  }
-
-  function canFocus({ external = false, respectSelection = false } = {}) {
-    const q = composer()
-    if (!q || q.disabled) return false
-    if (uiBlocks()) return false
-    if (!external && window.DT_LOCAL) return false // 移动端不自动弹键盘
-    if (!winActive()) return false // 窗口没激活就别制造“有焦点没光标”的假象
-    const ae = document.activeElement
-    if (ae && ae !== q && isTextual(ae)) return false
-    if (respectSelection) {
-      const sel = window.getSelection()
-      if (sel && !sel.isCollapsed && String(sel).trim()) return false
-    }
-    return true
-  }
-
-  function focus({ end = false, clearSelection = false, external = false, respectSelection = false } = {}) {
-    const q = composer()
-    if (!q) return false
-    if (!canFocus({ external, respectSelection })) return false
-    if (clearSelection) {
-      try { window.getSelection()?.removeAllRanges() } catch {}
-    }
-    const wasFocused = document.activeElement === q
-    try { q.focus({ preventScroll: true }) } catch {}
-    if (document.activeElement !== q) return false
-    // 只有“刚刚才把焦点拿回来”时才把光标放到末尾；
-    // 已经在输入框里打字时不要动光标，否则会把光标从中间弹到末尾。
-    if (end && !wasFocused) {
-      const n = q.value.length
-      try { q.setSelectionRange(n, n) } catch {}
-    }
-    if (!wasFocused) attempts++
-    return true
-  }
-
-  function setActive(v) {
-    known = true
-    active = Boolean(v)
-    if (active) {
-      // 窗口刚被激活：立刻把焦点还给输入框（除非用户正在别处输入/有弹窗）
-      setTimeout(() => focus({ respectSelection: true }), 0)
-      setTimeout(() => focus({ respectSelection: true }), 120)
-    }
-  }
-
-  // 主进程事件：dt:win-state（激活状态广播）、dt:win-focus、dt:win-blur
-  window.addEventListener('dt:win-state', (e) => setActive(e.detail?.active !== false))
-  window.addEventListener('dt:win-focus', () => setActive(true))
-  window.addEventListener('dt:win-blur', () => setActive(false))
-
-  // 浏览器 / 移动端 / 主进程没发消息时的兜底
-  window.addEventListener('focus', () => {
-    setTimeout(() => focus({ respectSelection: true }), 60)
-  })
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') setTimeout(() => focus({ respectSelection: true }), 60)
-  })
-
-  return { focus, canFocus, isTextual, uiBlocks, winActive, setActive, get state() { return { known, active, attempts } } }
-})()
-window.DTFocus = DTFocus
-
-// 启动时给几次机会（主进程的 dt:win-state 通常在这之前就到了）
-setTimeout(() => DTFocus.focus({ respectSelection: true }), 120)
-setTimeout(() => DTFocus.focus({ respectSelection: true }), 600)
-setTimeout(() => DTFocus.focus({ respectSelection: true }), 1600)
-
-/* ---------- 点击后回焦：所有“操作类”点击统一处理 ---------- */
-// 这些区域里的点击不抢焦点（弹窗、搜索条、右键菜单、浮动菜单、分组框、树状图）
-const FOCUS_KEEP_ZONE = [
-  '.modal', '#treeview', '#settings', '#usage', '#update', '#ask', '#welcome',
-  '#search-bar', '#theme-pop', '#instr-pop', '#page-menu', '#float-menu', '#group-bar'
-].join(', ')
-
-// 明确“点了就该回到输入框”的控件
-const FOCUS_BACK = [
-  'button', '.doc-item', '.doc-group', '.doc-arch-head', '.g-chev', '.g-name', '.g-count',
-  '.quote', '.chip-x', '.dot', '.collapse', '.hl', 'summary', '.tv-node', '.page-tag'
-].join(', ')
-
-// 这个点击是不是“应该保留焦点在别处”
-function keepFocusHere(t) {
-  if (!(t instanceof Element)) return true
-  if (t.closest(FOCUS_KEEP_ZONE)) return true
-  // 注意：页码框/组名框没有 type 属性，不能用 input[type="text"] 去匹配，
-  // 必须按“是不是真的能打字的控件”来判断，否则会把页码框的焦点抢走。
-  const ctl = t.closest('textarea, input, select, [contenteditable="true"]')
-  if (ctl && DTFocus.isTextual(ctl)) return true
-  return false
-}
-
-document.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return
-  const t = e.target
-  if (!(t instanceof Element)) return
-  if (keepFocusHere(t)) return
-  // 点按钮这类“操作”时清掉残留选区，避免 document 级 mouseup 拿旧选区重新挂锚点/弹浮层
-  if (t.closest(FOCUS_BACK)) {
-    try { window.getSelection()?.removeAllRanges() } catch {}
-  }
-}, true)
-
-document.addEventListener('click', (e) => {
-  const t = e.target
-  if (keepFocusHere(t)) return
-  const explicit = t instanceof Element && Boolean(t.closest(FOCUS_BACK))
-  setTimeout(() => {
-    if (document.querySelector('.modal:not([hidden])')) return
-    if (!explicit) {
-      const sel = window.getSelection()
-      if (sel && !sel.isCollapsed && String(sel).trim()) return // 用户正在选中文字，别抢
-    }
-    DTFocus.focus({ end: explicit, clearSelection: explicit, respectSelection: !explicit })
-  }, 0)
-}, true)
-
-/* ---------- 弹窗 / 搜索条 / 分组建组条关闭后回焦 ---------- */
-if (typeof MutationObserver !== 'undefined') {
-  const watcher = new MutationObserver(() => {
-    if (document.querySelector('.modal:not([hidden])')) return
-    const search = document.querySelector('#search-bar')
-    if (search && !search.hidden) return
-    const bar = document.querySelector('#group-bar')
-    if (bar && !bar.hidden) return
-    setTimeout(() => DTFocus.focus({ end: false }), 40)
-  })
-  document.querySelectorAll('.modal, #treeview, #search-bar, #group-bar, #instr-pop, #theme-pop').forEach((el) => {
-    watcher.observe(el, { attributes: true, attributeFilter: ['hidden', 'class'] })
-  })
-}
-
-/* ---------- 键盘兜底（只补焦点，不重放字符） ---------- */
-// 正常流程下焦点不会丢；这里只处理极端情况（比如窗口刚激活时的那一拍）。
-// 不重放字符：中文输入法首键是 keyCode 229，重放只会把半截拼音塞进输入框。
-document.addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return
-  if (document.querySelector('.modal:not([hidden])')) return
-  const ae = document.activeElement
-  if (DTFocus.isTextual(ae)) return
-  if (!DTFocus.winActive()) return
-  const q = document.querySelector('#q')
-  if (!q || q.disabled) return
-  if (e.keyCode === 229 || e.key === 'Process' || e.key === 'Unidentified') {
-    DTFocus.focus({ end: true }) // 输入法首键：只把焦点挪回来，下一次按键就能正常上屏
-    return
-  }
-  if (!DTFocus.focus({ end: true })) return
-  if (e.key.length !== 1) return // 退格/回车/方向键等交给浏览器，焦点对了就行
-  // 单字符用 insertText 回放：保留光标位置、触发 input 事件
-  let inserted = false
-  try { inserted = document.execCommand('insertText', false, e.key) } catch {}
-  if (inserted) e.preventDefault()
-})

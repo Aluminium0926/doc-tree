@@ -1,0 +1,6 @@
+DocTree v153 / APP 1.0.43
+构建时间: 2026-11-25
+基线: v152 / 1.0.42（git tag v152-before-refactor）
+本次: 服务端边界层 + 存储原子化 + 前端模块化 + 全部已知 bug
+关键文件: server.mjs  lib/{ids,http,routes,services,store}.mjs  public/modules/  desktop/main.cjs
+测试: npm test（API 81 + UI 31） / node scripts/test-electron.mjs（13）

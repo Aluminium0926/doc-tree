@@ -1,7 +1,7 @@
 {
   "name": "doc-tree",
   "productName": "文档树",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "private": true,
   "description": "本地文档阅读器 + 锚定原文的追问树",
   "type": "module",
@@ -10,7 +10,12 @@
     "start": "node server.mjs",
     "app": "electron .",
     "mock": "node scripts/mock-llm.mjs",
+    "test": "node scripts/test-api.mjs && node scripts/test-ui.mjs",
+    "test:api": "node scripts/test-api.mjs",
+    "test:ui": "node scripts/test-ui.mjs",
     "e2e": "node scripts/e2e.mjs",
+    "bump": "node scripts/bump-version.mjs",
+    "mobile": "node mobile/build.mjs",
     "dist": "electron-packager . DocTree --platform=win32 --arch=x64 --out=release --overwrite --asar=false --prune=true --ignore=^/release --ignore=^/\\.npm-cache --ignore=^/scripts --ignore=^/docs"
   },
   "license": "MIT",

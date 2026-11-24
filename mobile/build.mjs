@@ -33,6 +33,7 @@ copy(path.join(root, 'public', 'chem.js'), path.join(out, 'chem.js'))
 copy(path.join(root, 'public', 'theme.js'), path.join(out, 'theme.js'))
 copy(path.join(root, 'public', 'style.css'), path.join(out, 'style.css'))
 copy(path.join(root, 'public', 'vendor'), path.join(out, 'vendor'))
+copy(path.join(root, 'public', 'modules'), path.join(out, 'modules')) // app.js 依赖的前端模块
 copy(path.join(here, 'src'), path.join(out, 'src'))
 
 // PPTX 前端渲染（A 路线）

@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #0a0c11;
   --panel: #0f1218;
   --panel-2: #151a22;
@@ -347,6 +347,7 @@ input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px
   background: rgba(255, 184, 0, 0.34);
   outline: 1px solid var(--warn);
   border-radius: 2px;
+  pointer-events: none; /* 别挡住文字选择：命中高亮只是标记，不需要点 */
   pointer-events: none;
   z-index: 3;
 }

@@ -1,5 +1,5 @@
 // 文档树 · 桌面端主进程（服务同进程内启动，避免子进程被拦截）
-const { app, BrowserWindow, Menu, shell, dialog } = require('electron')
+const { app, BrowserWindow, Menu, shell, dialog, screen, session } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 const net = require('node:net')
@@ -15,6 +15,9 @@ const LOG_FILE = path.join(LOG_DIR, 'desktop.log')
 function log(msg) {
   try {
     fs.mkdirSync(LOG_DIR, { recursive: true })
+    try {
+      if (fs.statSync(LOG_FILE).size > 2 * 1024 * 1024) fs.renameSync(LOG_FILE, LOG_FILE + '.1')
+    } catch {}
     fs.appendFileSync(LOG_FILE, `${new Date().toISOString()} ${msg}\n`)
   } catch {}
 }
@@ -95,7 +98,15 @@ function boundsFile() {
 function loadBounds() {
   try {
     const b = JSON.parse(fs.readFileSync(boundsFile(), 'utf8'))
-    if (b && b.width > 600 && b.height > 400) return b
+    if (b && b.width > 600 && b.height > 400) {
+      // 换过显示器/改过分辨率后，旧坐标可能整个落在屏幕外（窗口看不见也点不到）
+      const visible = screen.getAllDisplays().some((d) => {
+        const a = d.workArea
+        return b.x < a.x + a.width - 80 && b.x + b.width > a.x + 80 && b.y < a.y + a.height - 40 && b.y + b.height > a.y + 40
+      })
+      if (visible) return b
+      log('saved bounds are off-screen, fallback to default')
+    }
   } catch {}
   return { width: 1500, height: 950 }
 }
@@ -121,13 +132,55 @@ function createWindow() {
     autoHideMenuBar: true,
     title: '文档树',
     show: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false }
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true, // 没有 preload，不需要 Node 能力；开了以后渲染层即使被 XSS 也拿不到系统权限
+      spellcheck: false
+    }
   })
 
   mainWindow.loadURL(`http://127.0.0.1:${serverPort}/`)
   mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
     log(`did-fail-load ${code} ${desc}`)
   })
+
+  // ---------- 导航与权限 ----------
+  // 回答里的链接如果没有新窗口打开，会把整个应用窗口导航到外站（界面没了、也退不回来）。
+  // 渲染层已经给外链加了 target=_blank；这里再兜一层：主框架只允许停在本地服务上。
+  const appOrigin = `http://127.0.0.1:${serverPort}`
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (url.startsWith(appOrigin)) return
+    e.preventDefault()
+    log('blocked navigation -> ' + url)
+    if (/^https?:/i.test(url)) shell.openExternal(url)
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  try {
+    session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+      if (details.resourceType !== 'mainFrame') return cb({})
+      const csp = [
+        "default-src 'self'",
+        "script-src 'self' 'wasm-unsafe-eval'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data:",
+        "connect-src 'self' https://api.github.com",
+        "worker-src 'self' blob:",
+        "frame-src 'none'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'none'"
+      ].join('; ')
+      cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
+    })
+  } catch (e) {
+    log('csp setup failed: ' + e.message)
+  }
+
   // ---------- 焦点桥 ----------
   // 渲染进程没法可靠判断窗口是否被激活（实测 Electron 里 document.hasFocus() 会误报 true），
   // 所以窗口激活状态由主进程广播给页面，页面再决定要不要聚焦输入框。
@@ -208,10 +261,6 @@ function createWindow() {
   })
   mainWindow.on('close', saveBounds)
   mainWindow.on('closed', () => (mainWindow = null))
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
-    return { action: 'deny' }
-  })
   if (isDev && !process.env.DOCTREE_NO_DEVTOOLS) mainWindow.webContents.openDevTools({ mode: 'detach' })
 }
 

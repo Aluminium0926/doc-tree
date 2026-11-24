@@ -3,9 +3,11 @@
 本地文档阅读器：导入 PDF / Word / Markdown / 纯文本，边读边划词提问，**每个回答都是树上的一个节点**，可以在回答里继续划词、继续分叉。
 
 - 前端：原生 JS + PDF.js（无框架、无构建步骤）
-- 后端：Node 原生 http，单文件服务
+- 后端：Node 原生 http；`server.mjs` 只做路由，业务在 `lib/`
+- 桌面壳：Electron（`desktop/main.cjs`）
 - 模型：任意 OpenAI 兼容端点；默认 `deepseek-flash`（V4.1-Flash，原生多模态，截图提问直接可用）
 - 数据：全部存在本机 `data/`
+- 版本：**UI v153 / APP 1.0.43**（变更见 [docs/v153-upgrade.md](docs/v153-upgrade.md)）
 
 ![演示](docs/demo.png)
 
@@ -113,17 +115,41 @@ npm start          # 起服务，浏览器开 http://127.0.0.1:4317
 ## 目录结构
 
 ```
-server.mjs            HTTP 服务：静态、导入、SSE 转发、持久化
-lib/extract.mjs       PDF（含中文 cmap）/ docx / 文本解析
-lib/store.mjs         data/ 读写
-lib/llm.mjs           OpenAI 兼容端点、流式解析
-lib/context.mjs       摘要、检索、祖先链、导出 Markdown
-public/               前端（index.html / app.js / style.css）
-public/vendor/        pdfjs、marked、cmaps（离线可用）
-data/docs/*.json      文档元信息 + 分页文本
-data/trees/*.json     追问树
-data/files/*          原始文件
+server.mjs             HTTP 入口：静态资源 + 路由分发 + 统一错误处理
+lib/ids.mjs            id 白名单校验（所有来自请求体的 id 先过这里）
+lib/http/              router / body / respond / guard（边界层：CSRF、Range、SSE）
+lib/routes/            state / docs / groups / ask —— 每个文件一组端点
+lib/services/ask.mjs   提问与续写共用管线（SSE、超时、工具、页图、用量）
+lib/store.mjs          原子写 + schema + 损坏隔离（坏文件自动备份 .corrupt-*）
+lib/llm.mjs            OpenAI 兼容 / Anthropic 端点、流式解析、重试
+lib/context.mjs        摘要、检索、祖先链、导出 Markdown、系统提示词
+lib/extract.mjs        PDF（含中文 cmap）/ docx / pptx / 文本解析
+lib/render.mjs         页面栅格化（PDF 句柄复用）
+lib/office.mjs         PPT → PDF
+lib/websearch.mjs      DeepSeek Search / Fetch
+public/index.html      页面结构
+public/app.js          前端主逻辑（UI / 视图 / 事件）
+public/modules/        util / markdown / api / sse / focus —— 前端公共模块
+public/vendor/         pdfjs、marked、katex、cmaps（离线可用）
+desktop/main.cjs       Electron 主进程（窗口、菜单、端口、焦点桥、CSP）
+mobile/                手机端：浏览器版后端替身（api.js）、Android 壳、PWA
+scripts/               测试与开发脚本（test-api / test-ui / test-electron / mock-llm）
+data/docs/*.json       文档元信息 + 分页文本
+data/trees/*.json      追问树
+data/files/*           原始文件
 ```
+
+## 测试
+
+```bash
+npm test          # = test-api（81 项）+ test-ui（31 项），自带假模型与临时数据目录
+node scripts/test-electron.mjs   # 真实 Electron 验收（需要先把应用以 --remote-debugging-port 启动）
+```
+
+- `npm run test:api` 覆盖全部端点、CSRF、路径穿越、Range、空 body、损坏数据、提问/续写
+- `npm run test:ui` 用本机 Chrome 跑真实页面：渲染、提问、搜索、外链、自增高、点后回焦
+- `npm run bump 1.0.44 v154` 一条命令更新版本号与缓存号
+- `npm run mobile` 重新生成 `mobile/www`（会一并拷 `public/modules`）
 
 ## 已知限制
 
