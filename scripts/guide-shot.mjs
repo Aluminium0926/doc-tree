@@ -1,0 +1,16 @@
+﻿import puppeteer from 'puppeteer-core'
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: 'new', args: ['--no-sandbox','--disable-gpu'], defaultViewport: { width: 1440, height: 900 } })
+const p = await b.newPage()
+await p.goto('http://127.0.0.1:4317/', { waitUntil: 'networkidle2' })
+await p.evaluate(async () => {
+  await fetch('/api/flags', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ welcomeSeen: false }) })
+  localStorage.removeItem('dt:seenWelcome')
+})
+await p.reload({ waitUntil: 'networkidle2' })
+await new Promise(r => setTimeout(r, 700))
+await p.click('#welcome-newbie')
+await new Promise(r => setTimeout(r, 250))
+await p.screenshot({ path: 'welcome-guide2.png' })
+const btns = await p.evaluate(() => [...document.querySelectorAll('#welcome-guide .modal-actions button')].map(b => ({ t: b.textContent.trim(), w: Math.round(b.getBoundingClientRect().width), h: Math.round(b.getBoundingClientRect().height) })))
+console.log(JSON.stringify(btns))
+await b.close()

@@ -1,0 +1,119 @@
+﻿import fs from 'node:fs'
+let s = fs.readFileSync('server.mjs', 'utf8')
+
+// 停止时标记 stopped
+s = s.replace(
+  "    } else if (ac.signal.aborted || (e && e.name === 'AbortError')) {\n      node.status = 'stopped'\n      sse({ type: 'stopped' })",
+  "    } else if (ac.signal.aborted || (e && e.name === 'AbortError')) {\n      node.status = 'stopped'\n      node.stopped = true\n      sse({ type: 'stopped' })"
+)
+
+// 正常完成清标记
+s = s.replace("    node.status = 'done'\n  } catch (e) {", "    node.status = 'done'\n    delete node.stopped\n  } catch (e) {")
+
+// 路由
+s = s.replace(
+  "  if (p === '/api/ask' && req.method === 'POST') return handleAsk(req, res)",
+  "  if (p === '/api/ask' && req.method === 'POST') return handleAsk(req, res)\n  if (p === '/api/ask/resume' && req.method === 'POST') return handleResume(req, res)"
+)
+
+// handleResume 实现，插在 handleAsk 前
+if (!s.includes('async function handleResume')) {
+  s = s.replace(
+    'async function handleAsk(req, res) {',
+    `async function handleResume(req, res) {
+  const body = JSON.parse((await readBody(req)).toString('utf8') || '{}')
+  const cfg = llm.readConfig()
+  if (!cfg.apiKey) return json(res, 400, { error: '未配置 API Key' })
+
+  const doc = await store.getDoc(body.docId)
+  if (!doc) return json(res, 404, { error: '文档不存在' })
+  const group = await store.groupOfDoc(doc.id)
+  let docs = [doc]
+  if (group) docs = (await Promise.all(group.docIds.map((id) => store.getDoc(id)))).filter(Boolean)
+
+  const tree = await store.getTree(doc.id)
+  const node = tree.nodes[body.nodeId]
+  if (!node) return json(res, 404, { error: '这条回答不存在' })
+
+  const messages = buildAskMessages({ doc, docs, tree, node })
+  messages.push({ role: 'assistant', content: node.answer || '（还没有任何内容）' })
+  messages.push({
+    role: 'user',
+    content: '（上面的回答被中断了。请从断点处继续写，不要重复已有内容，也不要重新开头；必要时调用工具补读原文。）'
+  })
+
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no'
+  })
+  const sse = (o) => res.write(`data: ${JSON.stringify(o)}\\n\\n`)
+  sse({ type: 'meta', node })
+
+  const ac = new AbortController()
+  let timedOut = false
+  const timeout = setTimeout(() => {
+    timedOut = true
+    try {
+      ac.abort()
+    } catch {}
+  }, 120000)
+  req.on('close', () => ac.abort())
+
+  try {
+    const usage = await llm.streamChatWithTools(
+      messages,
+      (d) => {
+        node.answer += d
+        sse({ type: 'delta', text: d })
+      },
+      {
+        signal: ac.signal,
+        model: node.model || cfg.model,
+        exec: (name, args) => execTool(docs, doc.id, name, args),
+        onTool: (t) => sse({ type: 'tool', name: t.name, args: t.args }),
+        onReasoning: (t) => {
+          node.reasoning = (node.reasoning || '') + t
+          sse({ type: 'reasoning', text: t })
+        }
+      }
+    )
+    if (usage) {
+      const prev = node.usage || {}
+      node.usage = {
+        input: (prev.input || 0) + usage.input,
+        output: (prev.output || 0) + usage.output,
+        cacheHit: (prev.cacheHit || 0) + usage.cacheHit,
+        cacheMiss: (prev.cacheMiss || 0) + usage.cacheMiss,
+        total: (prev.total || 0) + usage.total,
+        rounds: (prev.rounds || 0) + (usage.rounds || 1)
+      }
+      sse({ type: 'usage', usage: node.usage })
+    }
+    delete node.stopped
+  } catch (e) {
+    if (timedOut) {
+      node.error = '请求超时（120 秒），已中止'
+      sse({ type: 'error', message: node.error })
+    } else if (ac.signal.aborted || (e && e.name === 'AbortError')) {
+      node.stopped = true
+      sse({ type: 'stopped' })
+    } else {
+      node.error = String(e.message || e)
+      sse({ type: 'error', message: node.error })
+    }
+  }
+
+  clearTimeout(timeout)
+  delete node.status
+  await store.saveTree(doc.id, tree)
+  sse({ type: 'done', node })
+  res.end()
+}
+
+async function handleAsk(req, res) {`
+  )
+}
+fs.writeFileSync('server.mjs', s)
+console.log('resume endpoint ok')

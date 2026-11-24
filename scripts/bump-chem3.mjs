@@ -1,0 +1,10 @@
+import fs from 'node:fs'
+let j=fs.readFileSync('public/chem.js','utf8')
+j=j.replace("}, 8000)", "}, 15000)")
+fs.writeFileSync('public/chem.js',j)
+let a=fs.readFileSync('public/app.js','utf8')
+a=a.replace("chem.js?v=1.0.31", "chem.js?v=1.0.32").replace("const UI_VERSION = 'v137'","const UI_VERSION = 'v138'").replace("const APP_VERSION = '1.0.31'","const APP_VERSION = '1.0.32'")
+fs.writeFileSync('public/app.js',a)
+let p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='1.0.32';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')
+let m=fs.readFileSync('mobile/android/AndroidManifest.xml','utf8');m=m.replace('android:versionCode="29"','android:versionCode="30"').replace('android:versionName="1.0.29"','android:versionName="1.0.30"');fs.writeFileSync('mobile/android/AndroidManifest.xml',m)
+console.log('bump 1.0.32 / apk 1.0.30', a.includes('chem.js?v=1.0.32'), j.includes('}, 15000)'))

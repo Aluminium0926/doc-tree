@@ -1,0 +1,10 @@
+import fs from 'node:fs'
+let j=fs.readFileSync('public/chem.js','utf8')
+j=j.replace("fixedBondLength: 20", "fixedBondLength: 30")
+j=j.replace("}, 15000)", "}, 8000)")
+fs.writeFileSync('public/chem.js',j)
+let c=fs.readFileSync('public/style.css','utf8')
+c=c.replace(".chem-canvas pre { width: 100%; margin: 0; padding: 10px 14px; background: #f6f7fb; color: #333; font-size: 11px; overflow: auto; white-space: pre-wrap; word-break: break-all; }", ".chem-canvas pre { width: 100%; margin: 0; padding: 10px 14px; background: #f6f7fb; color: #333; font-size: 11px; overflow: auto; white-space: pre-wrap !important; word-break: break-all; }")
+c=c.replace(".chem-rxn-arrow { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; min-width: 72px; color: #263140; padding: 0 2px; }", ".chem-rxn-arrow { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; min-width: 72px; color: #263140; padding: 0 2px; }\n.chem-rxn-arrow > span { display: block; }")
+fs.writeFileSync('public/style.css',c)
+console.log('scale/watchdog', j.includes('fixedBondLength: 30'), j.includes('}, 8000)'))

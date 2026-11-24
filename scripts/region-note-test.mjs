@@ -1,0 +1,16 @@
+﻿import puppeteer from 'puppeteer-core'
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: 'new', args: ['--no-sandbox','--disable-gpu'], defaultViewport: { width: 1440, height: 900 } })
+const p = await b.newPage()
+await p.goto('http://127.0.0.1:4317/', { waitUntil: 'networkidle2' })
+await p.evaluate(() => localStorage.setItem('dt:seenWelcome','1'))
+await p.reload({ waitUntil: 'networkidle2' })
+await new Promise(r => setTimeout(r, 500))
+await p.click('#btn-settings')
+await new Promise(r => setTimeout(r, 300))
+await p.select('#cfg-format', 'anthropic')
+await new Promise(r => setTimeout(r, 250))
+const info = await p.evaluate(() => { const n = document.querySelector('#anthropic-note'); const r = n.getBoundingClientRect(); return { visible: !n.hidden, text: n.innerText, rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } } })
+console.log(JSON.stringify(info))
+const box = { x: info.rect.x - 20, y: info.rect.y - 20, width: info.rect.w + 40, height: info.rect.h + 40 }
+await p.screenshot({ path: 'region-note.png', clip: box })
+await b.close()

@@ -1,0 +1,18 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1400,height:950}})
+const p=await b.newPage()
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'});await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'));await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,1000))
+const docs=await p.evaluate(async()=>(await (await fetch('/api/state')).json()).docs);const pdfs=docs.filter(d=>d.kind==='pdf').slice(0,2)
+async function click(t){await p.evaluate((t)=>{[...document.querySelectorAll('.doc-item')].find(x=>x.textContent.includes(t))?.click()},t);await new Promise(r=>setTimeout(r,2200))}
+await click(pdfs[0].title)
+await p.evaluate(()=>{const sc=document.querySelector('#page-scroll');sc.scrollTop=Math.round(sc.scrollHeight*0.35)})
+await new Promise(r=>setTimeout(r,500))
+console.log('A',await p.evaluate(()=>({scroll:document.querySelector('#page-scroll').scrollTop,views:JSON.parse(localStorage.getItem('dt:views')||'{}')})).then(x=>({scroll:x.scroll,view:x.views[Object.keys(x.views).find(k=>true)]})))
+const id=await p.evaluate(()=>{const t=document.querySelector('#doc-title').textContent;return t})
+console.log('title',id)
+console.log('viewFor',await p.evaluate(()=>{const v=JSON.parse(localStorage.getItem('dt:views')||'{}');return v}))
+await click(pdfs[1].title)
+console.log('after leave views',await p.evaluate(()=>JSON.parse(localStorage.getItem('dt:views')||'{}')))
+await click(pdfs[0].title)
+console.log('after back',await p.evaluate(()=>({scroll:document.querySelector('#page-scroll').scrollTop,title:document.querySelector('#doc-title').textContent,views:JSON.parse(localStorage.getItem('dt:views')||'{}')})))
+await b.close()

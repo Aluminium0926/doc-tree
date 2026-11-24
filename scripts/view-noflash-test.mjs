@@ -1,0 +1,15 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1200,height:900}})
+const p=await b.newPage()
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'});await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'));await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,900))
+const docs=await p.evaluate(async()=>(await (await fetch('/api/state')).json()).docs);const pdfs=docs.filter(d=>d.kind==='pdf').slice(0,2)
+async function click(id,wait=2000){await p.evaluate((id)=>document.querySelector(`.doc-item[data-id="${id}"]`)?.click(),id);await new Promise(r=>setTimeout(r,wait))}
+await click(pdfs[0].id)
+await p.evaluate(()=>{const sc=document.querySelector('#page-scroll');sc.scrollTop=Math.round(sc.scrollHeight*0.35)});await new Promise(r=>setTimeout(r,500))
+await p.evaluate((id)=>document.querySelector(`.doc-item[data-id="${id}"]`)?.click(),pdfs[1].id)
+await new Promise(r=>setTimeout(r,80))
+const early=await p.evaluate(()=>({switchClass:document.querySelector('#page-scroll').className,loadingHidden:document.querySelector('#view-loading').hidden,scroll:document.querySelector('#page-scroll').scrollTop}))
+await new Promise(r=>setTimeout(r,1800))
+const late=await p.evaluate(()=>({switchClass:document.querySelector('#page-scroll').className,loadingHidden:document.querySelector('#view-loading').hidden,scroll:document.querySelector('#page-scroll').scrollTop}))
+console.log({early,late})
+await b.close()

@@ -1,0 +1,10 @@
+﻿import puppeteer from 'puppeteer-core'
+const b = await puppeteer.launch({ executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless:'new', args:['--no-sandbox','--disable-gpu'], defaultViewport:{width:390,height:844,isMobile:true,hasTouch:true} })
+const p = await b.newPage()
+await p.goto('http://127.0.0.1:4501/', { waitUntil:'networkidle2' })
+await p.evaluate(()=>{ localStorage.setItem('dt:seenWelcome','1'); localStorage.removeItem('dt:groups') })
+await p.reload({waitUntil:'networkidle2'})
+await new Promise(r=>setTimeout(r,700))
+const out = await p.evaluate(async ()=>{ const r = await fetch('/api/usage'); return { status: r.status, body: await r.json() } })
+console.log(JSON.stringify({ status: out.status, hasTotals: !!out.body.totals, days: out.body.days?.length, docs: out.body.docs?.length }))
+await b.close()

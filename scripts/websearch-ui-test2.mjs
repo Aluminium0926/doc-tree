@@ -1,0 +1,12 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1440,height:1000}})
+const p=await b.newPage()
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'})
+await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'))
+await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,1000))
+const docs=await p.$$('.doc-item');if(docs.length)await docs[0].click();await new Promise(r=>setTimeout(r,800))
+await p.click('#btn-web');await p.type('#q','请联网搜索今天北京的天气，并给出来源');await p.click('#btn-send')
+await new Promise(r=>setTimeout(r,35000))
+const out=await p.evaluate(()=>({status:document.querySelector('#status')?.textContent||'',links:[...document.querySelectorAll('a[href^="http"]')].slice(-8).map(a=>a.textContent+' | '+a.href), tail:document.body.innerText.slice(-900)}))
+console.log('status',out.status);console.log('links',out.links);console.log('tail',out.tail)
+await b.close()

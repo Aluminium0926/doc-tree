@@ -1,0 +1,54 @@
+async function importFiles(files) {
+  for (const f of files) {
+    const ext = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase()
+    if (!/\.(pdf|docx?|md|markdown|txt|pptx?)$/.test(ext)) {
+      toast(`暂不支持 ${ext || '这个格式'}，目前支持 PDF / Word / Markdown / TXT / PPT / PPTX`)
+      continue
+    }
+    if (f.size > 150 * 1024 * 1024) {
+      toast('文件超过 150MB，建议先压缩或导出成 PDF')
+      continue
+    }
+
+    let target = f
+    let converted = false
+    if (window.DT_LOCAL && /\.(pptx?)$/i.test(ext)) {
+      setStatus(`正在用 LibreOffice 转换：${f.name}`)
+      try {
+        const { convertPptToPdf } = await import('./src/ppt.js')
+        const blob = await convertPptToPdf(f, (p) => {
+          if (p?.percent != null) setStatus(`PPT 转换中… ${Math.round(p.percent)}%`)
+        })
+        target = new File([blob], f.name.replace(/\.[^.]+$/, '') + '.pdf', { type: 'application/pdf' })
+        converted = true
+      } catch (e) {
+        console.warn('[ppt]', e)
+        if (ext === '.ppt') {
+          toast('PPT 转换失败：' + (e.message || e) + '，请先导出 PDF 再导入')
+          setStatus('')
+          continue
+        }
+        toast('PPT 版式转换失败，按文字导入：' + (e.message || e))
+      }
+    }
+
+    setStatus(`解析中：${target.name}`)
+    try {
+      const r = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'x-filename': encodeURIComponent(target.name) },
+        body: await target.arrayBuffer()
+      })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || '导入失败')
+      await loadState()
+      renderLibrary()
+      await openDoc(j.doc.id)
+      setStatus(converted ? `已转换并导入 ${j.doc.pages} 页` : `已导入 ${j.doc.pages} 页`)
+      setTimeout(() => setStatus(''), 3000)
+    } catch (e) {
+      toast(e.message)
+      setStatus('')
+    }
+  }
+}

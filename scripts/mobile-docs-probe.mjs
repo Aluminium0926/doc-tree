@@ -1,0 +1,12 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:390,height:844,isMobile:true,hasTouch:true}})
+const p=await b.newPage()
+const errs=[];p.on('pageerror',e=>errs.push(e.message.slice(0,160)))
+await p.goto('http://127.0.0.1:4501/',{waitUntil:'networkidle2'})
+await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'))
+await p.reload({waitUntil:'networkidle2'})
+await new Promise(r=>setTimeout(r,800))
+const docs=await p.evaluate(async()=>{const r=await fetch('/api/state');const j=await r.json();return j.docs.map(d=>({id:d.id,title:d.title,kind:d.kind,pages:d.pages?.length}))})
+console.log(JSON.stringify(docs.slice(0,6),null,1))
+console.log('errs',errs)
+await b.close()

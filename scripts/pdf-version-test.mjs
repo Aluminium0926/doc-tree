@@ -1,0 +1,10 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1400,height:950}})
+const p=await b.newPage();const logs=[];p.on('console',m=>{if(m.type()==='error')logs.push(m.text().slice(0,200))});p.on('pageerror',e=>logs.push('PAGEERROR '+e.message))
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'});await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'));await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,800))
+const docs=await p.evaluate(async()=>(await (await fetch('/api/state')).json()).docs);const pdf=docs.find(d=>d.kind==='pdf')
+await p.evaluate((id)=>document.querySelector(`.doc-item[data-id="${id}"]`)?.click(),pdf.id)
+await new Promise(r=>setTimeout(r,3500))
+const state=await p.evaluate(()=>({pages:document.querySelectorAll('.page').length,drawn:document.querySelectorAll('.page[data-drawn="1"]').length,text:document.querySelector('#doc-title').textContent}))
+console.log(state,'errs',logs.slice(0,5))
+await b.close()

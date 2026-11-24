@@ -1,0 +1,15 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1400,height:950}})
+const p=await b.newPage()
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'});await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'));await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,900))
+const docs=await p.evaluate(async()=>(await (await fetch('/api/state')).json()).docs);const pdfs=docs.filter(d=>d.kind==='pdf'&&d.pages>5).slice(0,2)
+async function click(id,wait=5000){await p.evaluate((id)=>document.querySelector(`.doc-item[data-id="${id}"]`)?.click(),id);await new Promise(r=>setTimeout(r,wait))}
+await click(pdfs[0].id)
+await p.evaluate(()=>{const sc=document.querySelector('#page-scroll');sc.scrollTop=Math.round(sc.scrollHeight*0.45);document.querySelector('#tree').scrollTop=Math.round(document.querySelector('#tree').scrollHeight*0.5)});await new Promise(r=>setTimeout(r,800))
+const before=await p.evaluate(()=>({scroll:document.querySelector('#page-scroll').scrollTop,max:document.querySelector('#page-scroll').scrollHeight,tree:document.querySelector('#tree').scrollTop,id:document.querySelector('.doc-item.active')?.dataset.id}))
+await click(pdfs[1].id)
+const mid=await p.evaluate(()=>({id:document.querySelector('.doc-item.active')?.dataset.id,scroll:document.querySelector('#page-scroll').scrollTop}))
+await click(pdfs[0].id)
+const after=await p.evaluate(()=>({scroll:document.querySelector('#page-scroll').scrollTop,tree:document.querySelector('#tree').scrollTop,id:document.querySelector('.doc-item.active')?.dataset.id}))
+console.log({titles:pdfs.map(d=>d.title),before,mid,after})
+await b.close()

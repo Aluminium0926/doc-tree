@@ -1,0 +1,11 @@
+import fs from 'node:fs'
+let h=fs.readFileSync('public/index.html','utf8')
+h=h.replace('title="联网搜索（DeepSeek 官方，需 deepseek 接口）"','title="联网搜索（DeepSeek 官方 Search API，可与本地读页同时使用；搜索接口按次计费）"')
+fs.writeFileSync('public/index.html',h)
+let a=fs.readFileSync('public/app.js','utf8')
+a=a.replace("setStatus(S.webSearch ? '联网搜索已开启：提问时会先查互联网并给出来源' : '')", "setStatus(S.webSearch ? '联网已开启：可同时查网页和读本地文档；搜索接口按次计费' : '')")
+a=a.replace("const UI_VERSION = 'v130'","const UI_VERSION = 'v131'").replace("const APP_VERSION = '1.0.24'","const APP_VERSION = '1.0.25'")
+fs.writeFileSync('public/app.js',a)
+let p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='1.0.25';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')
+let m=fs.readFileSync('mobile/android/AndroidManifest.xml','utf8');m=m.replace('android:versionCode="22"','android:versionCode="23"').replace('android:versionName="1.0.22"','android:versionName="1.0.23"');fs.writeFileSync('mobile/android/AndroidManifest.xml',m)
+console.log('bump webcombined 1.0.25 / apk 1.0.23')

@@ -1,0 +1,26 @@
+﻿import puppeteer from 'puppeteer-core'
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: 'new', args: ['--no-sandbox','--disable-gpu'], defaultViewport: { width: 1440, height: 900 } })
+const p = await b.newPage()
+await p.goto('http://127.0.0.1:4317/', { waitUntil: 'networkidle2' })
+await p.evaluate(() => localStorage.setItem('dt:seenWelcome','1'))
+const id = await p.evaluate(async () => { const st = await (await fetch('/api/state')).json(); return st.docs.find(d => d.kind === 'pdf')?.id })
+await p.goto('http://127.0.0.1:4317/?doc=' + id, { waitUntil: 'networkidle2' })
+await p.waitForSelector('.page', { timeout: 20000 })
+await new Promise(r => setTimeout(r, 1200))
+const info = await p.evaluate(() => {
+  document.querySelector('#btn-shot').click()
+  const pg = document.querySelector('.page'), r = pg.getBoundingClientRect()
+  const x1 = r.left + 40, y1 = r.top + 60, x2 = r.left + r.width - 40, y2 = r.top + 260
+  pg.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: x1, clientY: y1 }))
+  window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x2, clientY: y2 }))
+  window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x2, clientY: y2 }))
+  return new Promise((resolve) => setTimeout(() => {
+    const sh = document.querySelector('#shot-chip'), th = sh.querySelector('.shot-thumb'), img = sh.querySelector('img')
+    const rr = sh.getBoundingClientRect(), tr = th.getBoundingClientRect(), ir = img.getBoundingClientRect()
+    resolve({ chipW: Math.round(rr.width), thumbW: Math.round(tr.width), imgW: Math.round(ir.width), imgH: Math.round(ir.height), overflowRight: Math.round(ir.right - tr.right) })
+  }, 900))
+})
+const comp = await p.$('#composer')
+await comp.screenshot({ path: 'shot-full.png' })
+console.log(JSON.stringify(info))
+await b.close()

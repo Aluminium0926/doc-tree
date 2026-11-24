@@ -1,0 +1,63 @@
+export async function chat(messages, { maxTokens = 600, temperature, model, provider } = {}) {
+  const cfg = readConfig()
+  const baseUrl = provider?.baseUrl || cfg.baseUrl
+  const key = provider?.apiKey || cfg.apiKey
+  if (!key) throw new Error('未配置 API Key，请点右上角设置填写')
+  const format = resolveFormat(baseUrl, provider?.format ?? cfg.apiFormat)
+  const temp = temperature ?? cfg.temperature
+  const useModel = model || cfg.model
+
+  if (format === 'anthropic') {
+    const conv = toAnthropic(messages)
+    const body = { model: useModel, max_tokens: maxTokens, messages: conv.messages, temperature: Math.min(1, Math.max(0, temp)) }
+    if (conv.system) body.system = [{ type: 'text', text: conv.system, cache_control: { type: 'ephemeral' } }]
+    const res = await fetchWithRetry(endpointOf(baseUrl, format), {
+      method: 'POST',
+      headers: headersOf(key, format),
+      body: JSON.stringify(body)
+    })
+    if (!res.ok) throw new Error(explain(res.status, await res.text()))
+    return pickAnthropicText(await res.json())
+  }
+
+  const res = await fetchWithRetry(endpointOf(baseUrl, format), {
+    method: 'POST',
+    headers: headersOf(key, format),
+    body: JSON.stringify({
+      model: useModel,
+      messages,
+      max_tokens: maxTokens,
+      temperature: temp,
+      ...thinkingParams(cfg)
+    })
+  })
+  if (!res.ok) throw new Error(explain(res.status, await res.text()))
+  const j = await res.json()
+  return j.choices?.[0]?.message?.content || ''
+}
+
+export async function ocrImage(dataUrl) {
+  const cfg = readConfig()
+  const provider =
+    cfg.visionBaseUrl || cfg.visionApiKey
+      ? {
+          baseUrl: cfg.visionBaseUrl || cfg.baseUrl,
+          apiKey: cfg.visionApiKey || cfg.apiKey,
+          format: cfg.visionFormat || cfg.apiFormat
+        }
+      : undefined
+  const text = await chat(
+    [
+      { role: 'system', content: '你是 OCR 引擎。只提取图片中的文字，保持原有段落、标题、列表和表格顺序；不要解释、不要总结、不要补充。图片里没有文字就输出空字符串。' },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '提取这张图片里的全部文字。' },
+          { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+        ]
+      }
+    ],
+    { maxTokens: 4096, temperature: 0, model: cfg.visionModel || cfg.model, provider }
+  )
+  return String(text || '').trim()
+}

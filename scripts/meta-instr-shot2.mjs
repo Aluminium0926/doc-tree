@@ -1,0 +1,13 @@
+﻿import puppeteer from 'puppeteer-core'
+const b = await puppeteer.launch({ executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless:'new', args:['--no-sandbox','--disable-gpu'], defaultViewport:{width:1440,height:900} })
+const p = await b.newPage()
+await p.goto('http://127.0.0.1:4317/', { waitUntil:'networkidle2' })
+await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'))
+const st = await (await fetch('http://127.0.0.1:4317/api/state')).json()
+const doc = st.docs.find(d=>!d.hidden && d.kind==='pdf')
+await p.goto('http://127.0.0.1:4317/?doc='+doc.id, { waitUntil:'networkidle2' })
+await new Promise(r=>setTimeout(r,900))
+const pos = await p.evaluate(()=>{ const r=document.querySelector('#doc-meta').getBoundingClientRect(); return {x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height), txt:r && document.querySelector('#doc-meta').innerText} })
+await p.screenshot({ path:'meta-instr.png', clip:{ x: Math.max(0,pos.x-240), y: Math.max(0,pos.y-30), width: 620, height: 80 } })
+console.log(JSON.stringify(pos))
+await b.close()

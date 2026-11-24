@@ -1,0 +1,11 @@
+import fs from 'node:fs'
+let h=fs.readFileSync('public/index.html','utf8')
+h=h.replace('title="联网搜索（DeepSeek 官方服务端搜索，免费；只计模型 token；可与本地读页同时使用）"','title="联网搜索（DeepSeek 官方 Search API，可与本地读页同时使用；约 5 元/1000 次）"')
+fs.writeFileSync('public/index.html',h)
+let a=fs.readFileSync('public/app.js','utf8')
+a=a.replace("setStatus(S.webSearch ? '联网已开启：官方服务端搜索免费，只计模型 token；可同时读本地文档' : '')", "setStatus(S.webSearch ? '联网已开启：Search API 按次计费（约 5 元/1000 次），可与本地文档同时用' : '')")
+a=a.replace("const UI_VERSION = 'v133'","const UI_VERSION = 'v134'").replace("const APP_VERSION = '1.0.27'","const APP_VERSION = '1.0.28'")
+fs.writeFileSync('public/app.js',a)
+let p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version='1.0.28';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')
+let m=fs.readFileSync('mobile/android/AndroidManifest.xml','utf8');m=m.replace('android:versionCode="25"','android:versionCode="26"').replace('android:versionName="1.0.25"','android:versionName="1.0.26"');fs.writeFileSync('mobile/android/AndroidManifest.xml',m)
+console.log('bump paid 1.0.28 / apk 1.0.26')

@@ -1,0 +1,162 @@
+[
+  {
+    "name": "default",
+    "tR": 687,
+    "tC": 2207,
+    "total": 3182,
+    "rChars": 234,
+    "cChars": 189
+  },
+  {
+    "name": "max",
+    "tR": 1016,
+    "tC": 5177,
+    "total": 6080,
+    "rChars": 1136,
+    "cChars": 224
+  },
+  {
+    "name": "low",
+    "tR": 636,
+    "tC": 4249,
+    "total": 4260,
+    "rChars": 435,
+    "cChars": 168
+  },
+  {
+    "name": "high",
+    "tR": 1141,
+    "tC": 3480,
+    "total": 3793,
+    "rChars": 645,
+    "cChars": 172
+  },
+  {
+    "name": "default",
+    "tR": 530,
+    "tC": 3988,
+    "total": 4675,
+    "rChars": 981,
+    "cChars": 225
+  },
+  {
+    "name": "high",
+    "tR": 865,
+    "tC": 3004,
+    "total": 4284,
+    "rChars": 1063,
+    "cChars": 205
+  },
+  {
+    "name": "low",
+    "tR": 693,
+    "tC": 1904,
+    "total": 2993,
+    "rChars": 231,
+    "cChars": 202
+  },
+  {
+    "name": "max",
+    "tR": 535,
+    "tC": 3333,
+    "total": 4031,
+    "rChars": 1028,
+    "cChars": 207
+  },
+  {
+    "name": "default",
+    "tR": 877,
+    "tC": 3404,
+    "total": 3843,
+    "rChars": 758,
+    "cChars": 184
+  },
+  {
+    "name": "high",
+    "tR": 350,
+    "tC": 1910,
+    "total": 3059,
+    "rChars": 620,
+    "cChars": 213
+  },
+  {
+    "name": "max",
+    "tR": 614,
+    "tC": 3494,
+    "total": 4457,
+    "rChars": 1039,
+    "cChars": 188
+  },
+  {
+    "name": "low",
+    "tR": 822,
+    "tC": 4916,
+    "total": 4951,
+    "rChars": 427,
+    "cChars": 158
+  },
+  {
+    "name": "low",
+    "tR": 234,
+    "tC": 2010,
+    "total": 2931,
+    "rChars": 351,
+    "cChars": 185
+  },
+  {
+    "name": "max",
+    "tR": 415,
+    "tC": 2629,
+    "total": 3935,
+    "rChars": 1127,
+    "cChars": 183
+  },
+  {
+    "name": "high",
+    "tR": 982,
+    "tC": 3010,
+    "total": 3559,
+    "rChars": 631,
+    "cChars": 192
+  },
+  {
+    "name": "default",
+    "tR": 329,
+    "tC": 2989,
+    "total": 3725,
+    "rChars": 936,
+    "cChars": 225
+  },
+  {
+    "name": "high",
+    "tR": 388,
+    "tC": 1723,
+    "total": 2674,
+    "rChars": 687,
+    "cChars": 166
+  },
+  {
+    "name": "low",
+    "tR": 539,
+    "tC": 2822,
+    "total": 3308,
+    "rChars": 403,
+    "cChars": 181
+  },
+  {
+    "name": "max",
+    "tR": 506,
+    "tC": 4809,
+    "total": 5549,
+    "rChars": 1298,
+    "cChars": 209
+  },
+  {
+    "name": "default",
+    "tR": 695,
+    "tC": 2477,
+    "total": 3465,
+    "rChars": 655,
+    "cChars": 206
+  }
+]

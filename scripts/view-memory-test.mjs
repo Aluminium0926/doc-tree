@@ -1,0 +1,20 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1400,height:950}})
+const p=await b.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message))
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'})
+await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'))
+await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,1000))
+const docs=await p.evaluate(async()=>(await (await fetch('/api/state')).json()).docs)
+const pdfs=docs.filter(d=>d.kind==='pdf')
+console.log('pdfs',pdfs.slice(0,4).map(d=>d.title+':'+d.pages))
+if(pdfs.length<2){console.log('need 2 pdfs');await b.close();process.exit(0)}
+async function openByTitle(t){await p.evaluate((t)=>{const el=[...document.querySelectorAll('.doc-item')].find(x=>x.textContent.includes(t));el?.click()},t);await new Promise(r=>setTimeout(r,2500))}
+await openByTitle(pdfs[0].title)
+await p.evaluate(()=>{const sc=document.querySelector('#page-scroll');sc.scrollTop=Math.round(sc.scrollHeight*0.4);const tr=document.querySelector('#tree');tr.scrollTop=Math.round(tr.scrollHeight*0.5)})
+await new Promise(r=>setTimeout(r,500))
+const before=await p.evaluate(()=>({scroll:document.querySelector('#page-scroll').scrollTop,tree:document.querySelector('#tree').scrollTop,page:document.querySelector('.page-nav')?.textContent||''}))
+await openByTitle(pdfs[1].title)
+await openByTitle(pdfs[0].title)
+const after=await p.evaluate(()=>({scroll:document.querySelector('#page-scroll').scrollTop,tree:document.querySelector('#tree').scrollTop,page:document.querySelector('.page-nav')?.textContent||''}))
+console.log({before,after,errs:errs.slice(0,3)})
+await b.close()

@@ -1,0 +1,10 @@
+﻿const base='http://127.0.0.1:4317'
+const st=await (await fetch(base+'/api/state')).json()
+const doc=st.docs.find(d=>d.kind==='pdf')
+const t0=Date.now()
+const r=await fetch(base+'/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({docId:doc.id,anchor:{kind:'doc',page:1,quote:''},question:'用一句话说 2026 年 11 月 DeepSeek 有什么新消息，并给出来源',web:true})})
+console.log('status',r.status)
+const reader=r.body.getReader();const dec=new TextDecoder();let buf='';let events=[];let answer=''
+while(true){const {value,done}=await reader.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;while((i=buf.indexOf('\n\n'))>=0){const raw=buf.slice(0,i);buf=buf.slice(i+2);if(!raw.startsWith('data: '))continue;let j;try{j=JSON.parse(raw.slice(6))}catch{continue};events.push(j.type);if(j.type==='delta')answer+=j.text;if(j.type==='web')console.log('WEB EVENT',JSON.stringify(j));if(j.type==='web-sources')console.log('SOURCES',JSON.stringify(j.sources));if(j.type==='error')console.log('ERROR',j.message)}}
+console.log('types',[...new Set(events)].join(','),'ms',Date.now()-t0)
+console.log('answer tail',answer.slice(-500))

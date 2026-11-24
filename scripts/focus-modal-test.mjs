@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1200,height:900}})
+const p=await b.newPage()
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'});await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'));await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,1000))
+await p.click('#btn-settings');await new Promise(r=>setTimeout(r,200))
+const open=await p.evaluate(()=>({active:document.activeElement?.id,hidden:document.querySelector('#settings')?.hidden}))
+await p.evaluate(()=>document.querySelector('#settings')?.setAttribute('hidden',''));await new Promise(r=>setTimeout(r,200))
+const closed=await p.evaluate(()=>document.activeElement?.id)
+console.log({open,closed})
+await b.close()

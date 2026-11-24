@@ -1,0 +1,25 @@
+﻿import puppeteer from 'puppeteer-core'
+const b = await puppeteer.launch({ executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless:'new', args:['--no-sandbox','--disable-gpu'], defaultViewport:{width:1440,height:900} })
+const p = await b.newPage()
+const errs=[]; p.on('pageerror',e=>errs.push(e.message.slice(0,160)))
+await p.goto('http://127.0.0.1:4317/', {waitUntil:'networkidle2'})
+await p.evaluate(()=>localStorage.setItem('dt:seenWelcome','1'))
+const st = await (await fetch('http://127.0.0.1:4317/api/state')).json()
+const doc = st.docs.find(d=>d.kind==='pdf' && d.pages>=20)
+await p.goto('http://127.0.0.1:4317/?doc='+doc.id, {waitUntil:'networkidle2'})
+await new Promise(r=>setTimeout(r,2500))
+const stats = () => p.evaluate(()=>{
+  const cs=[...document.querySelectorAll('.page canvas')]
+  const drawn=cs.filter(c=>c.width>0)
+  const bytes=drawn.reduce((s,c)=>s+c.width*c.height*4,0)
+  return { pages: cs.length, drawn: drawn.length, MB: +(bytes/1048576).toFixed(1), widths: cs.slice(0,6).map(c=>c.width) }
+})
+const before = await stats()
+await p.evaluate(()=>{ const sc=document.querySelector('#page-scroll'); sc.scrollTop = sc.scrollHeight*0.55 })
+await new Promise(r=>setTimeout(r,1500))
+const mid = await stats()
+await p.evaluate(()=>{ const sc=document.querySelector('#page-scroll'); sc.scrollTop = sc.scrollHeight*0.9 })
+await new Promise(r=>setTimeout(r,1500))
+const end = await stats()
+console.log(JSON.stringify({before, mid, end, errs}, null, 1))
+await b.close()

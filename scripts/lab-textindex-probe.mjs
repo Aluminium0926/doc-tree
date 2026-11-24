@@ -1,0 +1,10 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:1400,height:1000}})
+const p=await b.newPage()
+await p.goto('http://127.0.0.1:4503/ppt-lab/',{waitUntil:'networkidle2'})
+await (await p.$('#file')).uploadFile('C:/Users/wangk/Desktop/大肥鱼的家/Cancer_Detection_Classification_FINAL_定稿_V4.2.pptx')
+await p.evaluate(()=>document.querySelector('#btnA').click())
+await new Promise(r=>setTimeout(r,6000))
+const info=await p.evaluate(()=>({w:__viewer?.slideWidth,h:__viewer?.slideHeight,count:__viewer?.slideCount,entries:__textIndex?.filter(e=>e.slideIndex===0).slice(0,6)}))
+console.log(JSON.stringify(info,null,1))
+await b.close()

@@ -1,0 +1,6 @@
+DocTree v152 / APP 1.0.42
+构建时间: 2026-11-25
+基线: v147 / 1.0.41
+本次修复: 提问框焦点状态机（DOM 层点击回焦 + 窗口层原生焦点桥）
+关键文件: public/app.js  desktop/main.cjs  public/index.html  package.json
+测试: node scripts/focus-test.mjs / node scripts/electron-focus-matrix.mjs

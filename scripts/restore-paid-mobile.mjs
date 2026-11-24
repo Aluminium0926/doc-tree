@@ -1,0 +1,11 @@
+import fs from 'node:fs'
+let a=fs.readFileSync('mobile/src/api.js','utf8')
+a=a.replace("import { webToolSpecs } from './websearch.js'", "import { webToolSpecs, searchWeb, fetchWeb } from './websearch.js'")
+a=a.replace(/const q = String\(args\?\.query \|\| ''\)\.trim\(\)\n\s*if \(!q\) throw new Error\('web_search 缺少 query'\)\n\s*const r = await webResearch\([\s\S]*?return JSON\.stringify\(\{ brief: r\.text, sources: r\.sources \}\)/g, `const r = await searchWeb(cfg, args)
+              addSources(r.sources)
+              return JSON.stringify({ results: r.results })`)
+a=a.replace(/const url = String\(args\?\.url \|\| ''\)\.trim\(\)\n\s*if \(!\/\^https\?:[^\n]*\n\s*const r = await webResearch\([\s\S]*?return JSON\.stringify\(\{ url, content: r\.text, sources: r\.sources \}\)/g, `const r = await fetchWeb(cfg, args)
+              addSources(r.sources)
+              return JSON.stringify({ title: r.title, url: r.url, content: r.content })`)
+fs.writeFileSync('mobile/src/api.js',a)
+console.log('mobile paid restored', !a.includes('webResearch('), (a.match(/await searchWeb/g)||[]).length, (a.match(/await fetchWeb/g)||[]).length)

@@ -1,0 +1,23 @@
+# ---- 依赖 / 构建产物 ----
+node_modules/
+.npm-cache/
+release/
+build/
+# ---- 运行时数据（绝对不能进仓库）----
+data/
+*.log
+server.log
+# ---- 移动端构建产物 ----
+mobile/www/
+mobile/*.apk
+mobile/*.idsig
+mobile/android/.gradle/
+mobile/android/**/build/
+# ---- 备份 / 归档 / 截图 ----
+_archive/
+snapshots/pre-refactor-*
+snapshots/*.zip
+/*.png
+/*.jpg
+scripts/*.png
+scripts/*.pdf

@@ -1,0 +1,11 @@
+import fs from 'node:fs'
+let s=fs.readFileSync('server.mjs','utf8')
+s=s.replace("import { webToolSpecs } from './lib/websearch.mjs'", "import { webToolSpecs, searchWeb, fetchWeb } from './lib/websearch.mjs'")
+s=s.replace(/const q = String\(args\?\.query \|\| ''\)\.trim\(\)\n\s*if \(!q\) throw new Error\('web_search 缺少 query'\)\n\s*const r = await llm\.webResearch\([\s\S]*?return JSON\.stringify\(\{ brief: r\.text, sources: r\.sources \}\)/g, `const r = await searchWeb(cfg, args)
+            addSources(r.sources)
+            return JSON.stringify({ results: r.results })`)
+s=s.replace(/const url = String\(args\?\.url \|\| ''\)\.trim\(\)\n\s*if \(!\/\^https\?:[^\n]*\n\s*const r = await llm\.webResearch\([\s\S]*?return JSON\.stringify\(\{ url, content: r\.text, sources: r\.sources \}\)/g, `const r = await fetchWeb(cfg, args)
+            addSources(r.sources)
+            return JSON.stringify({ title: r.title, url: r.url, content: r.content })`)
+fs.writeFileSync('server.mjs',s)
+console.log('server paid restored', !s.includes('llm.webResearch'), (s.match(/await searchWeb/g)||[]).length, (s.match(/await fetchWeb/g)||[]).length)

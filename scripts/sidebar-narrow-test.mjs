@@ -1,0 +1,21 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:872,height:900}})
+const p=await b.newPage()
+const errs=[];p.on('pageerror',e=>errs.push(e.message.slice(0,160)))
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'})
+await p.evaluate(()=>{localStorage.removeItem('dt:left');localStorage.setItem('dt:seenWelcome','1')})
+await p.reload({waitUntil:'networkidle2'})
+await new Promise(r=>setTimeout(r,800))
+const probe=()=>p.evaluate(()=>{
+  const app=document.querySelector('#app'), lib=document.querySelector('#library'), btn=document.querySelector('#btn-sidebar')
+  const cs=getComputedStyle(lib), bs=getComputedStyle(btn)
+  return {collapsed:app.classList.contains('collapsed'), libW:lib.getBoundingClientRect().width, libVisible:cs.visibility, btnDisplay:bs.display, center:document.querySelector('#viewer').getBoundingClientRect().width}
+})
+const initial=await probe()
+await p.click('#btn-sidebar'); await new Promise(r=>setTimeout(r,400))
+const afterOpen=await probe()
+await p.click('#btn-sidebar'); await new Promise(r=>setTimeout(r,400))
+const afterClose=await probe()
+await p.screenshot({path:'narrow-sidebar.png'})
+console.log(JSON.stringify({initial,afterOpen,afterClose,errs},null,1))
+await b.close()

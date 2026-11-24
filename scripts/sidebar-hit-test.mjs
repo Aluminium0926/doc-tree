@@ -1,0 +1,13 @@
+﻿import puppeteer from 'puppeteer-core'
+const b=await puppeteer.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:'new',args:['--no-sandbox','--disable-gpu'],defaultViewport:{width:872,height:900}})
+const p=await b.newPage()
+await p.goto('http://127.0.0.1:4317/',{waitUntil:'networkidle2'})
+await p.evaluate(()=>{localStorage.removeItem('dt:left');localStorage.setItem('dt:seenWelcome','1')})
+await p.reload({waitUntil:'networkidle2'});await new Promise(r=>setTimeout(r,700))
+const hit=()=>p.evaluate(()=>{const b=document.querySelector('#btn-sidebar').getBoundingClientRect();const el=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return {x:b.x,y:b.y,w:b.width,hit:el?.id||el?.className}})
+console.log('before',await hit())
+await p.click('#btn-sidebar');await new Promise(r=>setTimeout(r,700))
+console.log('open',await p.evaluate(()=>({cls:document.querySelector('#app').className,hit:(()=>{const b=document.querySelector('#btn-sidebar').getBoundingClientRect();return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.id})()})),await hit())
+await p.click('#btn-sidebar');await new Promise(r=>setTimeout(r,700))
+console.log('close',await p.evaluate(()=>document.querySelector('#app').className))
+await b.close()

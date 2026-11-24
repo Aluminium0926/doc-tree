@@ -1,0 +1,13 @@
+﻿import puppeteer from 'puppeteer-core'
+const b = await puppeteer.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: 'new', args: ['--no-sandbox','--disable-gpu'], defaultViewport: { width: 900, height: 700 } })
+const p = await b.newPage()
+await p.goto('http://127.0.0.1:4317/', { waitUntil: 'networkidle2' })
+await p.evaluate(() => localStorage.setItem('dt:seenWelcome','1'))
+await p.reload({ waitUntil: 'networkidle2' })
+await new Promise(r => setTimeout(r, 500))
+const input = await p.$('#file-input')
+await input.uploadFile('C:/Users/wangk/Desktop/大肥鱼的家/doc-tree/mobile/fixtures/xss.md')
+await new Promise(r => setTimeout(r, 1800))
+const out = await p.evaluate(() => ({ xss: window.__xss || null, hasOnerror: document.querySelector('.sheet')?.innerHTML.includes('onerror') }))
+console.log(JSON.stringify(out))
+await b.close()

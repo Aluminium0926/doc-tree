@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">文档树</string>
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0A0C11</item>
+        <item name="android:statusBarColor">#0A0C11</item>
+        <item name="android:navigationBarColor">#0A0C11</item>
+        <item name="android:colorAccent">#6D8DFF</item>
+    </style>
+</resources>
