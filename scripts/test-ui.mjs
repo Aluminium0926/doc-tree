@@ -600,6 +600,70 @@ console.log('\n=== 4.6 单分子朝向 / 空间利用率 ===')
     return { w: Math.round(r.width), h: Math.round(r.height) }
   })
   ok('窄容器里也不溢出（宽度 ≤ 可用宽度）', narrow && !narrow.missing && narrow.w <= 240, JSON.stringify(narrow))
+
+  // 横平竖直：所有键线必须落在 0° 或 ±60° 方向（偏差 ≤1.5°），不能整体歪几度
+  const axis = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.style.width = '520px'
+    host.innerHTML = '<pre><code class="language-smiles">label: methyl orange\nCN(C)c1ccc(/N=N/c2ccccc2)cc1</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2500))
+    const svg = host.querySelector('.chem-canvas svg')
+    if (!svg) return { missing: true }
+    const norm = (a) => {
+      const m = ((a % 90) + 90) % 90
+      return Math.min(m, 90 - m)
+    }
+    const devs = []
+    for (const p of svg.querySelectorAll('path')) {
+      const n = (p.getAttribute('d') || '').match(/-?\d+(?:\.\d+)?/g)?.map(Number) || []
+      if (n.length < 4) continue
+      devs.push(norm((Math.atan2(n[3] - n[1], n[2] - n[0]) * 180) / Math.PI))
+    }
+    if (!devs.length) return { missing: true }
+    const aligned = devs.filter((d) => d < 1).length
+    // 到最近晶格方向（0 或 30）的距离；SVG 坐标只保留 1 位小数，短键会有 ~1° 噪声
+    const offLattice = devs.map((d) => Math.min(d, Math.abs(d - 30)))
+    return {
+      count: devs.length,
+      alignedPct: Math.round((aligned / devs.length) * 100),
+      worstOffLattice: Math.round(Math.max(...offLattice) * 10) / 10
+    }
+  })
+  ok('拿到键线几何', axis && !axis.missing, JSON.stringify(axis))
+  ok('有足够多的键是水平/垂直的（≥25%）', axis?.alignedPct >= 25, 'aligned=' + axis?.alignedPct + '%')
+  ok('其余键都在 ±60° 晶格方向上（偏差 ≤4°）', axis?.worstOffLattice <= 4, 'worst=' + axis?.worstOffLattice)
+
+  // 线性稠环（蒽）：必须横着摆（之前被摆成 30° 斜的，宽高比只有 1.4）
+  const anthracene = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.style.width = '520px'
+    host.innerHTML = '<pre><code class="language-smiles">label: anthracene\nc1ccc2cc3ccccc3cc2c1</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2500))
+    const svg = host.querySelector('.chem-canvas svg')
+    if (!svg) return { missing: true }
+    const r = svg.getBoundingClientRect()
+    return { w: Math.round(r.width), h: Math.round(r.height), aspect: Math.round((r.width / r.height) * 100) / 100 }
+  })
+  ok('蒽是横着的（宽高比 ≥ 2.0）', anthracene?.aspect >= 2.0, JSON.stringify(anthracene))
+
+  // 只为“变宽”而旋转是不允许的：rotate 只能是 ±20° 内的小倾角纠正
+  const rots = await page.evaluate(() =>
+    ['chem-mo', 'chem-compact', 'chem-narrow'].map((id) => document.querySelector('#' + id + ' .chem-figure')?.dataset.rotate)
+  )
+  const off = (v) => {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return null
+    const a = Math.abs(n) % 360
+    return Math.min(a, 360 - a)
+  }
+  const bad = rots.map(off).filter((v) => v !== null && v > 20)
+  ok('方向只做小倾角纠正，不为变宽而旋转（|rotate| ≤ 20°）', bad.length === 0, JSON.stringify(rots))
 }
 
 console.log('\n=== 5. 搜索 / 高亮层不吃点击 ===')

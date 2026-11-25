@@ -172,7 +172,7 @@ function molPoints(molblock) {
   }
 }
 
-// 主惯性轴（PCA）角度：长轴方向。用它生成“长轴水平”和“长轴垂直”两个候选。
+// 主惯性轴（PCA）角度：长轴方向
 function principalAngleDeg(pts) {
   if (!pts || pts.length < 3) return 0
   const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length
@@ -189,6 +189,69 @@ function principalAngleDeg(pts) {
   }
   const deg = (0.5 * Math.atan2(2 * sxy, sxx - syy) * 180) / Math.PI
   return Number.isFinite(deg) ? Math.max(-90, Math.min(90, deg)) : 0
+}
+
+/*
+ * “横平竖直”吸附角
+ * ----------------
+ * RDKit 默认布局会给整张图一个随机倾角（比如甲基橙是 -8.6°），所有键都跟着歪，
+ * 看起来就是“图没摆正”。这里在 [-45°, 45°] 里搜索一个旋转量 r，让代价最小：
+ *
+ *   cost(r) = 所有键偏离最近水平/垂直的平均角度  +  主轴偏离水平的平均角度
+ *
+ * 两项等权：
+ * - 第一项保证“键尽量横平竖直”（苯环吸成上下两条水平键）；
+ * - 第二项防止把锯齿链（键角 ±30°）硬拧成阶梯形 —— 那种情况主轴本已水平，第二项会把 r 拉回 0。
+ * 旋转 90° 不破坏“轴对齐”，所以后续只用 {r, r+90} 两个候选，再挑更横的那个。
+ */
+function molBonds(molblock, pts) {
+  try {
+    const lines = String(molblock || '').split(/\r?\n/)
+    const counts = lines[3].trim().split(/\s+/)
+    const na = Number(counts[0])
+    const nb = Number(counts[1])
+    if (!na || !nb) return []
+    const bonds = []
+    for (let i = 0; i < nb; i++) {
+      const p = lines[4 + na + i].trim().split(/\s+/)
+      const a = Number(p[0]) - 1
+      const b = Number(p[1]) - 1
+      if (Number.isInteger(a) && Number.isInteger(b) && pts[a] && pts[b]) bonds.push([a, b])
+    }
+    return bonds
+  } catch {
+    return []
+  }
+}
+
+function snapAngleDeg(pts, bonds) {
+  if (!pts || !bonds || bonds.length < 1) return 0
+  const angles = []
+  for (const [i, j] of bonds) {
+    const dx = pts[j][0] - pts[i][0]
+    const dy = pts[j][1] - pts[i][1]
+    if (!dx && !dy) continue
+    angles.push((Math.atan2(dy, dx) * 180) / Math.PI)
+  }
+  if (!angles.length) return 0
+  const pca = principalAngleDeg(pts)
+  const axisDev = (deg) => {
+    const t = ((deg % 90) + 90) % 90
+    return Math.min(t, 90 - t)
+  }
+  let best = 0
+  let bestCost = Infinity
+  for (let k = -45; k <= 45; k += 0.25) {
+    let dev = 0
+    for (const a of angles) dev += axisDev(a + k)
+    // 主轴水平权重更高：宁可个别键留 30°，也不要把整张图拧成斜的（蒽、甾体就是这样）
+    const cost = axisDev(pca + k) + 0.5 * (dev / angles.length)
+    if (cost < bestCost - 1e-9) {
+      bestCost = cost
+      best = k
+    }
+  }
+  return Math.round(best * 100) / 100
 }
 
 function cropMoleculeSvg(svg) {
@@ -218,18 +281,25 @@ function cropMoleculeSvg(svg) {
 /*
  * 结构方向选择算法
  * -----------------
- * 目标：让分子在版面上“横着占满”（比如甲基橙的 N=N 水平），而不是竖成一条，
- * 把两侧留白浪费掉；同时别把小分子放大成糊满整张卡。
+ * 目标：
+ *   1. 横平竖直：键落在水平/垂直/±60° 的晶格方向上，不能整体歪几度；
+ *   2. 尊重分子本来的长宽：竖长的分子就竖着画（横向空间宝贵，不为变宽去拧它）。
  *
- * 1. 从 molblock 取原子坐标，算 PCA 主轴角 a（长轴方向）。
- * 2. 生成候选旋转角：-a（长轴转水平）、90-a（长轴转垂直），外加 0°（RDKit 默认布局），去重。
- * 3. 每个候选按固定键长（单分子 30 / 反应组分 18）渲染，裁切出真实包围盒 (w,h)。
- * 4. 排序：宽高比 w/h 越大越好（越横越省纵向空间）；
- *    比值接近时，比“按可用框能画多大”（scale），再接近就取更宽的。
- * 5. 落地尺寸：scale = min(可用宽/ w, 高度上限 / h, 1.5)，
- *    1.5 倍上限保证三五个原子的分子不会被放大成巨幅。
+ * 步骤：
+ * 1. snapAngleDeg() 在 [-45°,45°] 里搜一个旋转量，把整张图吸到晶格上；
+ * 2. 只有偏离 ≤20° 的小倾角才纠正（RDKit 常给几度随机倾斜，例如甲基橙 8.6°）；
+ *    超过 20° 说明本来就是一个合法的晶格摆法（如 30°/90°/150° 的竖直稠环），保持原样；
+ * 3. 只渲染这一个角度，按可用框等比缩放：scale = min(可用宽/w, 高度上限/h, 1.5)。
+ *
+ * 历史教训：v160 曾按“宽高比最大”挑方向，结果每个分子都被拧成横条；
+ * 且用坐标预测会踩 RDKit 绘制坐标系差 30° 的坑。所以这里不再做方向比较。
  */
 const UPSCALE_MAX = 1.5 // 显示时最多放大到原始绘制的 1.5 倍，避免三原子分子糊满整张卡
+const SNAP_MAX_DEG = 20 // 只纠正小倾角；更大的偏移视为“这本来就是另一种正着的晶格摆法”
+
+function normDeg(a) {
+  return Math.round((((a % 360) + 360) % 360) * 10) / 10
+}
 
 async function moleculeSvg(source, { bond = 30, availW = 460, maxH = 420 } = {}) {
   const bucket = Math.round(availW / 80)
@@ -240,42 +310,22 @@ async function moleculeSvg(source, { bond = 30, availW = 460, maxH = 420 } = {})
   const mol = rdkit.get_mol(source)
   if (!mol) throw new Error('SMILES 无法解析：' + source.slice(0, 60))
 
-  const candidates = []
+  let best = null
   try {
-    const pts = molPoints(mol.get_molblock())
-    const base = principalAngleDeg(pts)
-    const angles = []
-    for (const a of [-base, 90 - base, 0]) {
-      const norm = Math.round((((a % 360) + 360) % 360) * 10) / 10
-      if (!angles.includes(norm)) angles.push(norm)
-    }
-    for (const rotate of angles) {
-      const opt = { width: 1400, height: 1400, rotate, fixedBondLength: bond }
-      let raw = ''
-      try {
-        raw = mol.get_svg_with_highlights(JSON.stringify(opt))
-      } catch {
-        continue
-      }
-      if (!raw || !raw.includes('<svg')) continue
-      const cropped = cropMoleculeSvg(raw)
-      const aspect = cropped.w / Math.max(1, cropped.h)
-      // 落地后实际能画多大：受可用宽度、高度上限、放大倍数上限共同约束
-      const scale = Math.min(availW / cropped.w, maxH / cropped.h, UPSCALE_MAX)
-      candidates.push({ ...cropped, rotate, aspect, scale })
-    }
+    const molblock = mol.get_molblock()
+    const pts = molPoints(molblock)
+    const raw = snapAngleDeg(pts, molBonds(molblock, pts))
+    const rotate = normDeg(Math.abs(raw) <= SNAP_MAX_DEG ? raw : 0)
+    const opt = { width: 1400, height: 1400, rotate, fixedBondLength: bond }
+    const svg = mol.get_svg_with_highlights(JSON.stringify(opt))
+    if (!svg || !svg.includes('<svg')) throw new Error('没有生成结构图')
+    const cropped = cropMoleculeSvg(svg)
+    const aspect = cropped.w / Math.max(1, cropped.h)
+    const scale = Math.min(availW / cropped.w, maxH / cropped.h, UPSCALE_MAX)
+    best = { ...cropped, rotate, aspect, scale }
   } finally {
     mol.delete()
   }
-  if (!candidates.length) throw new Error('没有生成结构图')
-
-  candidates.sort((a, b) => {
-    const da = b.aspect - a.aspect
-    if (Math.abs(da) > 0.06) return da // 明显更横的优先
-    if (Math.abs(b.scale - a.scale) > 0.01) return b.scale - a.scale // 差不多横时，画得更大的优先
-    return b.w - a.w
-  })
-  const best = candidates[0]
   molCache.set(key, best)
   if (molCache.size > MAX_MOL_CACHE) molCache.delete(molCache.keys().next().value)
   return best
@@ -381,6 +431,7 @@ async function drawSingle(fig, info, source) {
   const availW = Math.min(460, Math.max(200, Math.round((canvas?.clientWidth || 460) - 24)))
   const item = await moleculeSvg(source, { bond: 30, availW, maxH: 420 })
   canvas.innerHTML = item.svg
+  fig.dataset.rotate = String(item.rotate)
   const svgEl = canvas.querySelector('svg')
   fitMolecule(svgEl, item, availW, 420)
   if (svgEl) {

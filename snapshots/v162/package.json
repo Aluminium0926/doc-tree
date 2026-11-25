@@ -1,0 +1,42 @@
+{
+  "name": "doc-tree",
+  "productName": "文档树",
+  "version": "1.0.52",
+  "private": true,
+  "description": "本地文档阅读器 + 锚定原文的追问树",
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "app": "electron .",
+    "mock": "node scripts/mock-llm.mjs",
+    "test": "node scripts/test-api.mjs && node scripts/test-ui.mjs",
+    "test:api": "node scripts/test-api.mjs",
+    "test:ui": "node scripts/test-ui.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "bump": "node scripts/bump-version.mjs",
+    "mobile": "node mobile/build.mjs",
+    "dist": "electron-packager . DocTree --platform=win32 --arch=x64 --out=release --overwrite --asar=false --prune=true --ignore=^/release --ignore=^/\\.npm-cache --ignore=^/scripts --ignore=^/docs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.2.0",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "jszip": "^3.10.2",
+    "katex": "^0.19.1",
+    "mammoth": "^1.13.0",
+    "marked": "^18.1.3",
+    "pdf-to-img": "^7.0.2",
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "@aiden0z/pptx-renderer": "^1.4.0",
+    "@matbee/libreoffice-converter": "^2.7.2",
+    "@rdkit/rdkit": "^2026.9.2",
+    "electron": "^45.3.0",
+    "electron-packager": "^17.1.2",
+    "modern-screenshot": "^4.7.0",
+    "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^25.16.0"
+  }
+}
