@@ -34,10 +34,12 @@ function ok(name, cond, extra = '') {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /* ---------- 假模型 ---------- */
+let lastLlmBody = null
 const mock = http.createServer(async (req, res) => {
   let raw = ''
   for await (const c of req) raw += c
   const body = JSON.parse(raw || '{}')
+  lastLlmBody = body
   const lastUser = [...(body.messages || [])].reverse().find((m) => m.role === 'user')
   const text = '## 模拟结论\n\n这是针对「' + String(lastUser?.content || '').slice(-30) + '」的回答。\n\n- 第一条\n- 第二条'
   if (!body.stream) {
@@ -209,6 +211,62 @@ console.log('\n=== 3. 提问（真 UI + 假模型） ===')
   ok('回答有内容', (node?.a || '').length > 5, node?.a)
   ok('节点计数更新', (node?.count || 0) === 1, 'count=' + node?.count)
   ok('发送后输入框已清空', (await page.evaluate(() => document.querySelector('#q').value)) === '')
+
+  // 粘贴图片：应该挂到本次提问（跟着问题发出去），而不是导入成文档
+  const docsBefore = await page.evaluate(() => document.querySelectorAll('#doc-list .doc-item').length)
+  const pasted = await page.evaluate(async () => {
+    const cv = document.createElement('canvas')
+    cv.width = 60
+    cv.height = 30
+    const ctx = cv.getContext('2d')
+    ctx.fillStyle = '#c33'
+    ctx.fillRect(0, 0, 60, 30)
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/png'))
+    const file = new File([blob], 'clip.png', { type: 'image/png' })
+    const dt = new DataTransfer()
+    dt.items.add(file)
+    document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+    await new Promise((r) => setTimeout(r, 900))
+    const chip = document.querySelector('#shot-chip')
+    return {
+      hidden: chip.hidden,
+      isDataUrl: String(chip.querySelector('img')?.src || '').startsWith('data:image/'),
+      note: chip.querySelector('.shot-note')?.textContent || '',
+      focus: document.activeElement?.id
+    }
+  })
+  const docsAfter = await page.evaluate(() => document.querySelectorAll('#doc-list .doc-item').length)
+  ok('粘贴图片不会导入成文档', docsBefore === docsAfter, `${docsBefore} → ${docsAfter}`)
+  ok('粘贴的图片挂在输入框上', pasted.hidden === false && pasted.isDataUrl, JSON.stringify(pasted))
+  ok('图片 chip 注明会随本次提问发送', pasted.note.includes('随本次提问'), pasted.note)
+  ok('粘贴后焦点仍在输入框', pasted.focus === 'q', pasted.focus)
+
+  // 带上这张图发一条，服务端应把它作为 image_url 送给模型
+  await page.click('#q')
+  await page.keyboard.type('这张图是什么？')
+  await page.keyboard.press('Enter')
+  await sleep(2600)
+  const sent = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('#tree .node')].pop()
+    return el ? { q: el.querySelector('.node-q')?.textContent || '', chipHidden: document.querySelector('#shot-chip').hidden } : null
+  })
+  ok('带图提问发出去了', (sent?.q || '').includes('这张图'), JSON.stringify(sent))
+  ok('发出后图片 chip 清空', sent?.chipHidden === true)
+  const parts = (lastLlmBody?.messages || []).flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+  ok('服务端把图片作为 image_url 送给模型', parts.some((p) => p.type === 'image_url' && String(p.image_url?.url || '').startsWith('data:image/')))
+  // 清理：删掉刚才这条带图提问，后面的删除/孤儿节点用例依赖“树里只剩 1 条”
+  await page.evaluate(async (docId) => {
+    const d = await (await fetch('/api/doc/' + docId)).json()
+    const n = Object.values(d.tree.nodes || {}).find((x) => String(x.question || '').includes('这张图'))
+    if (!n) return
+    await fetch('/api/node/delete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-doctree-client': 'test' },
+      body: JSON.stringify({ docId, nodeId: n.id })
+    })
+  }, txtDoc.id)
+  await page.reload({ waitUntil: 'load' })
+  await sleep(2200)
 }
 
 console.log('\n=== 3.5 复现 v147~v151 报过的问题 ===')

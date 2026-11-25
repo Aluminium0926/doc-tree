@@ -1,7 +1,7 @@
 {
   "name": "doc-tree",
   "productName": "文档树",
-  "version": "1.0.54",
+  "version": "1.0.55",
   "private": true,
   "description": "本地文档阅读器 + 锚定原文的追问树",
   "type": "module",

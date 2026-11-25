@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <meta name="theme-color" content="#0a0c11">
 <script src="/theme.js"></script>
-<link rel="stylesheet" href="/style.css?v=1054">
+<link rel="stylesheet" href="/style.css?v=1055">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <link id="hljs-theme" rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
 <script src="/vendor/highlight/highlight.min.js" defer></script>
@@ -100,7 +100,7 @@
     <button id="btn-locate" title="定位到最新提问" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
     <div id="composer">
       <div id="anchor-chip" hidden><span class="chip-text"></span><button class="chip-x">×</button></div>
-      <div id="shot-chip" hidden><span class="shot-thumb"><img alt="截图"></span><button class="chip-x">×</button></div>
+      <div id="shot-chip" hidden title="这张图会随本次提问一起发送"><span class="shot-thumb"><img alt="待发送图片"></span><span class="shot-note">图片 · 随本次提问发送</span><button class="chip-x">×</button></div>
       <textarea id="q" rows="2" placeholder="选中文字后点「发送」提问，留空也行"></textarea>
       <div class="composer-foot">
         <div class="effort" title="思考强度：轻=快，深度=更缜密但更慢">
@@ -225,7 +225,7 @@
 
 <script src="/vendor/katex/katex.min.js"></script>
 <script src="/vendor/katex/mhchem.min.js"></script>
-<script type="module" src="/app.js?v=1054"></script>
+<script type="module" src="/app.js?v=1055"></script>
 <div id="theme-pop" class="theme-pop" hidden>
   <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
   <div class="tp-seg" id="tp-mode">

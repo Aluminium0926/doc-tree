@@ -1,0 +1,5 @@
+DocTree v165 / APP 1.0.55
+构建时间: 2026-11-25
+基线: v164 / 1.0.54
+本次: 粘贴图片改为随提问发送（服务端真正把 image 送给模型），修此前 body.image 被忽略
+测试: npm test（API 91 + UI 90）/ test-electron 15

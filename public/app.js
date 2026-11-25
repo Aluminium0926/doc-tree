@@ -1,4 +1,4 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.54'
+import { enhanceChemBlocks } from './chem.js?v=1.0.55'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
@@ -10,8 +10,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v164'
-const APP_VERSION = '1.0.54'
+const UI_VERSION = 'v165'
+const APP_VERSION = '1.0.55'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -1871,13 +1871,19 @@ async function send(forced) {
   }
   let q = (forced ?? $('#q').value).trim()
   if (!q) {
-    if (!anchor) return toast('先选中文字，或输入一个问题')
-    q =
-      anchor.kind === 'answer'
-        ? '请把这段展开讲讲'
-        : anchor.kind === 'image'
-          ? '请解释框选的这部分内容'
-          : '请讲解这段内容'
+    if (S.pendingShot) {
+      // 只贴了图、没打字：按“解释这张图”处理
+      q = '请解释这张图里的内容'
+    } else if (!anchor) {
+      return toast('先选中文字，或输入一个问题')
+    } else {
+      q =
+        anchor.kind === 'answer'
+          ? '请把这段展开讲讲'
+          : anchor.kind === 'image'
+            ? '请解释框选的这部分内容'
+            : '请讲解这段内容'
+    }
   }
 
   const parentId = S.pendingParent || null
@@ -2136,6 +2142,43 @@ function onShotUp(e) {
 }
 
 /* ================= 杂项 UI ================= */
+// 把粘贴/拖进来的图片压成适合随问题发送的 dataURL：
+// 长边 ≤1280、JPEG 0.85，通常 150~400KB，远低于服务端 2MB 的 body 上限。
+function readImageForAsk(file, maxSide = 1280, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type || '')) {
+      reject(new Error('不是图片文件'))
+      return
+    }
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth || 1, img.naturalHeight || 1))
+        const w = Math.max(1, Math.round((img.naturalWidth || 1) * scale))
+        const h = Math.max(1, Math.round((img.naturalHeight || 1) * scale))
+        const cv = document.createElement('canvas')
+        cv.width = w
+        cv.height = h
+        const ctx = cv.getContext('2d')
+        ctx.fillStyle = '#fff' // PNG 透明底转 JPEG 时垫白，避免文字变黑
+        ctx.fillRect(0, 0, w, h)
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(cv.toDataURL('image/jpeg', quality))
+      } catch (err) {
+        reject(err)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('图片解码失败'))
+    }
+    img.src = url
+  })
+}
+
 // 输入框跟着内容长高（以前 rows=2 固定高度，长问题要在框里滚动）
 function autoGrowComposer() {
   const q = $('#q')
@@ -3054,21 +3097,21 @@ function bind() {
   $('#btn-instr')?.addEventListener('click', () => setInstrMode(!S.instrMode))
   $('#btn-web')?.addEventListener('click', () => setWebSearch(!S.webSearch))
 
-  document.addEventListener('paste', (e) => {
+  document.addEventListener('paste', async (e) => {
     const items = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/'))
     if (!items.length) return
     e.preventDefault()
-    const files = items
-      .map((i) => i.getAsFile())
-      .filter(Boolean)
-      .map((f, i) => {
-        const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-')
-        const ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
-        return new File([f], `剪贴板-${stamp}${i ? '-' + i : ''}.${ext}`, { type: f.type })
-      })
-    if (files.length) {
-      toast(`从剪贴板导入 ${files.length} 张图片`)
-      importFiles(files)
+    const file = items.map((i) => i.getAsFile()).find(Boolean)
+    if (!file) return
+    // 剪贴板里的图片当作“本次提问的配图”，跟着问题一起发出去；
+    // 想把它存成文档请走「导入」按钮或把文件拖到列表。
+    try {
+      S.pendingShot = await readImageForAsk(file)
+      updateChip()
+      window.DTFocus?.focus({ end: true })
+      toast(items.length > 1 ? '已附上第一张图片，会和这次提问一起发送' : '图片已附上，会和这次提问一起发送')
+    } catch (err) {
+      toast('图片读取失败：' + (err.message || err))
     }
   })
   $('#btn-stop')?.addEventListener('click', () => {

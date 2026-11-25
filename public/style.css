@@ -1275,3 +1275,5 @@ select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-s
 #confirm .modal-card { width: 340px; max-width: calc(100vw - 40px); }
 button.danger { background: #b42318; border-color: #b42318; color: #fff; }
 button.danger:hover { background: #971a10; border-color: #971a10; color: #fff; }
+
+.shot-note { flex: 0 0 auto; color: var(--dim); font-size: 11px; white-space: nowrap; }

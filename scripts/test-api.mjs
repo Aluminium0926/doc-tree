@@ -286,6 +286,36 @@ let nodeId
   eq('非 deepseek 开联网 → 400 并说明原因', bad.status, 400)
 }
 
+console.log('\n=== 6.5 随问题附带的图片 ===')
+{
+  const png =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+  const partsOf = () => (lastLlmPayload?.messages || []).flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+  const a = await sse('/api/ask', { docId: docA, question: '这张图是什么？', anchor: { kind: 'doc', page: 1, quote: '' }, image: png })
+  eq('带图提问 200', a.status, 200)
+  const parts = partsOf()
+  ok(
+    '图片作为 image_url 送给模型',
+    parts.some((p) => p.type === 'image_url' && String(p.image_url?.url || '').startsWith('data:image/png')),
+    JSON.stringify(parts.map((p) => p.type))
+  )
+  const node = a.events.find((e) => e.type === 'done')?.node
+  ok('节点标记带了图（续写时不再附页图）', node?.hadImage === true, JSON.stringify(node?.hadImage))
+
+  const b = await sse('/api/ask', { docId: docA, question: '非法图片测试', anchor: { kind: 'doc', page: 1, quote: '' }, image: 'http://evil.example/x.png' })
+  eq('非法图片被忽略但仍能提问', b.status, 200)
+  ok('非法图片没有送给模型', !partsOf().some((p) => p.type === 'image_url'))
+
+  const c = await sse('/api/ask', {
+    docId: docA,
+    question: '超长图片',
+    anchor: { kind: 'doc', page: 1, quote: '' },
+    image: 'data:image/png;base64,' + 'A'.repeat(1_900_000)
+  })
+  eq('超长图片被忽略但仍能提问', c.status, 200)
+  ok('超长图片没有送给模型', !partsOf().some((p) => p.type === 'image_url'))
+}
+
 console.log('\n=== 7. 树 / 分组 / 导出 / 高亮 / 指令 ===')
 {
   // 再问一次，产生父子节点，然后删父节点看子节点是否一起没
