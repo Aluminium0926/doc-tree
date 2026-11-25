@@ -65,6 +65,33 @@ const inlineRan = await page.evaluate(() => {
 ok('CSP 生效（内联脚本被拦）', inlineRan === false, 'inlineRan=' + inlineRan)
 consoleErrors.length = 0 // 这条被拦的报错是上面故意触发的，不算真实违规
 
+// RDKit 依赖 eval/wasm：CSP 必须放行，否则化学式全部“SMILES 无法解析”
+const rd = await page.evaluate(async () => {
+  const t0 = performance.now()
+  try {
+    if (!window.initRDKitModule) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = '/vendor/rdkit/RDKit_minimal.js'
+        s.onload = resolve
+        s.onerror = () => reject(new Error('RDKit 脚本加载失败'))
+        document.head.appendChild(s)
+      })
+    }
+    const mod = await window.initRDKitModule({ locateFile: (f) => '/vendor/rdkit/' + f })
+    const m = mod.get_mol('Nc1ccccc1')
+    const valid = Boolean(m && m.is_valid())
+    m?.delete?.()
+    return { ok: valid, ms: Math.round(performance.now() - t0) }
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) }
+  }
+})
+ok('CSP 下 RDKit 能初始化并解析 SMILES', rd.ok === true, JSON.stringify(rd))
+const cspEvalErr = consoleErrors.filter((t) => /unsafe-eval|Refused to evaluate/i.test(t))
+ok('没有 eval 相关的 CSP 拦截', cspEvalErr.length === 0, cspEvalErr.slice(0, 2).join(' | '))
+consoleErrors.length = 0
+
 // will-navigate：导航到外站应被主进程拦下
 const before = page.url()
 await page.evaluate(() => {

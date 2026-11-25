@@ -275,7 +275,8 @@ function partsHtml(parts, svgs) {
   return parts
     .map((p, i) => {
       const s = svgs[i]
-      const body = s && s.svg ? s.svg : `<span class="chem-part-error" title="${esc(p)}">SMILES 无法解析</span>`
+      const tip = s?.error ? `${p}：${s.error}` : p
+      const body = s && s.svg ? s.svg : `<span class="chem-part-error" title="${esc(tip)}">SMILES 无法解析</span>`
       return `${i ? '<span class="chem-plus">+</span>' : ''}<span class="chem-part">${body}</span>`
     })
     .join('')
@@ -336,9 +337,26 @@ async function drawReaction(fig, info) {
     Promise.all(r.left.map(safe)),
     Promise.all(r.right.map(safe))
   ])
+  const all = [...leftSvgs, ...rightSvgs]
+  const canvas = fig.querySelector('.chem-canvas')
+
+  // 引擎没起来（CSP 拦了 eval、wasm 缺失、初始化超时）时，别再逐个显示“SMILES 无法解析”误导人
+  const initError = all.length && all.every((x) => x.error && /RDKit|Content Security|Refused|wasm|初始化/i.test(x.error))
+  if (initError) {
+    fig.dataset.state = 'error'
+    canvas.textContent = ''
+    const err = document.createElement('div')
+    err.className = 'chem-error'
+    err.textContent = '化学引擎未能加载：' + String(all[0].error).slice(0, 160)
+    const pre = document.createElement('pre')
+    pre.textContent = info.source
+    canvas.append(err, pre)
+    return
+  }
+
   const above = info.reagents || (r.agents.length ? r.agents.join(' · ') : '')
   const below = info.conditions || ''
-  fig.querySelector('.chem-canvas').innerHTML = `<div class="chem-rxn">
+  canvas.innerHTML = `<div class="chem-rxn">
     <div class="chem-side">${partsHtml(r.left, leftSvgs)}</div>
     <div class="chem-rxn-arrow">
       ${above ? `<span class="chem-agents">${esc(above)}</span>` : ''}
@@ -347,7 +365,7 @@ async function drawReaction(fig, info) {
     </div>
     <div class="chem-side">${partsHtml(r.right, rightSvgs)}</div>
   </div>`
-  fig.dataset.state = [...leftSvgs, ...rightSvgs].some((x) => x.error) ? 'partial' : 'done'
+  fig.dataset.state = all.some((x) => x.error) ? 'partial' : 'done'
 }
 
 async function draw(fig, kind, info) {
@@ -389,9 +407,12 @@ export function enhanceChemBlocks(root) {
     const probe = parseBlock(lang, raw)
     if (!probe.source || !probe.source.trim()) continue
     const { fig, info } = makeFigure(lang, raw)
+    fig.dataset.state = 'rendering'
     pre.replaceWith(fig)
-    setTimeout(() => {
-          if (fig.dataset.state === 'done' || fig.dataset.state === 'error') return
+    const guard = setTimeout(() => {
+      // 只有「还在渲染」才算超时；partial（部分组分画不出来）和 done/error 都是终态，
+      // 以前 partial 被当成没完成，15 秒后把已经画好的图覆盖成“渲染超时”
+      if (fig.dataset.state !== 'rendering') return
       fig.dataset.state = 'error'
       const c = fig.querySelector('.chem-canvas')
       if (!c) return
@@ -403,6 +424,10 @@ export function enhanceChemBlocks(root) {
       p.textContent = info.source
       c.append(e, p)
     }, 15000)
-    draw(fig, lang, info).catch(() => {})
+    draw(fig, lang, info)
+      .catch(() => {
+        if (fig.dataset.state === 'rendering') fig.dataset.state = 'error'
+      })
+      .finally(() => clearTimeout(guard))
   }
 }

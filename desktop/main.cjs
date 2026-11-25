@@ -164,7 +164,9 @@ function createWindow() {
       if (details.resourceType !== 'mainFrame') return cb({})
       const csp = [
         "default-src 'self'",
-        "script-src 'self' 'wasm-unsafe-eval'",
+        // RDKit 的 emscripten 胶水层初始化时必须 eval/wasm 编译；
+        // 渲染层已 sandbox + 只允许 'self' 脚本 + sanitizeHtml 清洗，这里放开 eval 是必要代价
+        "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob: https:",
         "font-src 'self' data:",

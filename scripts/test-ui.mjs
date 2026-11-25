@@ -335,6 +335,74 @@ console.log('\n=== 4. Markdown / 外链 / 代码块 ===')
   ok('KaTeX 仍然渲染', res.katex, res.html.slice(0, 120))
 }
 
+console.log('\n=== 4.5 化学：真 RDKit 渲染 / 不再裁剪 / 部分失败不算超时 ===')
+{
+  const reaction =
+    'label: diazotization of aniline\nreaction: Nc1ccccc1.O=N[O-]>>N#[N+]c1ccccc1\nreagents: HNO2, HCl\nconditions: 0-5 °C, aqueous'
+  await page.evaluate(async (src) => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-real'
+    host.innerHTML = '<pre><code class="language-reaction"></code></pre>'
+    host.querySelector('code').textContent = src
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+  }, reaction)
+
+  let fig = null
+  for (let i = 0; i < 40; i++) {
+    await sleep(250)
+    fig = await page.evaluate(() => {
+      const f = document.querySelector('#chem-real .chem-figure')
+      if (!f || f.dataset.state === 'rendering') return null
+      return { state: f.dataset.state, text: f.textContent.replace(/\s+/g, ' ').slice(0, 120) }
+    })
+    if (fig) break
+  }
+  ok('反应式渲染完成', Boolean(fig), JSON.stringify(fig))
+  const chem = await page.evaluate(() => {
+    const f = document.querySelector('#chem-real .chem-figure')
+    if (!f) return null
+    const canvas = f.querySelector('.chem-canvas')
+    const cr = canvas.getBoundingClientRect()
+    const ag = f.querySelector('.chem-agents')?.getBoundingClientRect()
+    const cd = f.querySelector('.chem-cond-arrow')?.getBoundingClientRect()
+    return {
+      state: f.dataset.state,
+      parts: f.querySelectorAll('.chem-part svg').length,
+      errors: f.querySelectorAll('.chem-part-error').length,
+      agents: f.querySelector('.chem-agents')?.textContent || '',
+      cond: f.querySelector('.chem-cond-arrow')?.textContent || '',
+      // 上下不裁剪：标签必须完整落在画布内（留 2px 容差）
+      agentsInside: !ag || (ag.top >= cr.top - 2 && ag.bottom <= cr.bottom + 2),
+      condInside: !cd || (cd.top >= cr.top - 2 && cd.bottom <= cr.bottom + 2)
+    }
+  })
+  ok('三个组分都画出了结构（不是“SMILES 无法解析”）', chem && chem.parts === 3 && chem.errors === 0, JSON.stringify(chem))
+  ok('试剂显示在箭头上方', (chem?.agents || '').includes('HNO2'), chem?.agents)
+  ok('条件完整显示（0-5 °C, aqueous）', (chem?.cond || '').includes('aqueous'), chem?.cond)
+  ok('条件/试剂没有被裁掉', chem?.agentsInside === true && chem?.condInside === true, JSON.stringify(chem))
+
+  // 部分组分非法：应停在 partial，15 秒后不能被改成“渲染超时”
+  await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-partial'
+    host.innerHTML = '<pre><code class="language-reaction">label: partial test\nreaction: CCO.NOT_A_SMILES>>CC</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+  })
+  await sleep(1000)
+  const partial1 = await page.evaluate(() => document.querySelector('#chem-partial .chem-figure')?.dataset.state)
+  await sleep(15500)
+  const partial2 = await page.evaluate(() => {
+    const f = document.querySelector('#chem-partial .chem-figure')
+    return f ? { state: f.dataset.state, text: f.textContent.replace(/\s+/g, ' ').slice(0, 80) } : null
+  })
+  ok('部分失败时状态是 partial', partial1 === 'partial', String(partial1))
+  ok('partial 不会被 15 秒看门狗覆盖成“渲染超时”', partial2 && partial2.state === 'partial' && !partial2.text.includes('渲染超时'), JSON.stringify(partial2))
+}
+
 console.log('\n=== 5. 搜索 / 高亮层不吃点击 ===')
 {
   await page.keyboard.down('Control')
