@@ -31,7 +31,7 @@
 
 | 平台 | 文件 | 大小 | SHA256（前 16 位） |
 |---|---|---|---|
-| Windows x64 | `DocTree-v1.0.60-win32-x64.zip` | 213.6 MB | `3d847be19502e27f` |
+| Windows x64 | `DocTree-v1.0.60-win32-x64.zip` | 213.6 MB | `5e6fb37503f7fa08` |
 | Android | `DocTree-v1.0.60-android.apk` | 7.27 MB | `8c2b968ad6ce40f5` |
 | Web / PWA | `DocTree-v1.0.60-web.zip` | 7.29 MB | `ed53404b52f57c6c` |
 
@@ -39,8 +39,9 @@
 
 ## 三、安装 / 使用
 
-**Windows**：解压到**纯英文路径**（例如 `D:\DocTree`），双击 `DocTree.exe`。
-- ⚠️ 中文路径会让 Electron 的 GPU 进程崩溃（已知问题，与本次改动无关）
+**Windows**：解压后双击 `DocTree.exe` 即可。
+- 如果解压到了**中文路径**，请改用包内的 `启动文档树.vbs` 启动 —— 它会临时 `subst` 一个英文盘符再启动，退出后自动解除映射（这是老版本针对中文路径的补丁，本版已随包提供）
+- 直接双击 `DocTree.exe` 且路径含中文时，Electron 的 GPU 进程可能崩溃（已知问题）
 - 同一个用户数据目录同时只能跑一个实例（和已安装版不能同时开）
 
 **Android**：`adb install DocTree-v1.0.60-android.apk`，或传到手机点击安装（允许未知来源）。
@@ -50,6 +51,7 @@
 
 **macOS**：需要 macOS 环境构建（Windows 上无法产出可用的 `.app`）。
 已提供 `.github/workflows/release.yml`，打 tag 或手动触发即可在 macOS runner 上产出 x64/arm64 包并挂到 Release。
+打包细节、产物验证和已知限制见 `docs/BUILD-macOS.md`。
 
 ## 四、测试
 
@@ -61,7 +63,7 @@
 
 ## 五、已知问题
 
-1. **中文路径**下 Electron GPU 进程崩溃（应用可能起不来）→ 解压到英文路径
+1. **中文路径**下 Electron GPU 进程崩溃（应用可能起不来）→ 用包内 `启动文档树.vbs`，或解压到英文路径
 2. **macOS 未签名**（CI 产物）：首次打开需右键 → 打开，或 `xattr -dr com.apple.quarantine DocTree.app`
 3. **APK 为 debug 签名**，与旧版签名一致，可覆盖安装
 4. 移动端 `mobile/src/*` 仍是 `lib/*` 的分叉（长期债务，未在本版处理）
