@@ -128,9 +128,17 @@ console.log('\n=== 1. 加载 / 版本 ===')
   const st = await (await fetch(`${BASE}/api/state`)).json()
   ok('服务端版本一致', st.serverVersion === pkg.version, st.serverVersion)
   ok('页面没有 JS 报错', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '))
-  ok('模块化：app.js 引用了 modules/', js.includes("./modules/util.js") && js.includes("./modules/api.js"))
-  ok('焦点管理器已加载', await page.evaluate(() => Boolean(window.DTFocus)))
-  ok('启动后焦点在输入框', (await ae()) === 'q', await ae())
+  ok('模块化：app.js 引用了 modules/', js.includes('./modules/util.js') && js.includes('./modules/api.js'))
+  // v170 焦点规则：只有鼠标点输入框区域才聚焦，启动时不再自动抢焦点
+  ok('启动后焦点不在输入框（等用户点）', (await ae()) !== 'q', await ae())
+  ok('不再有自动焦点管理器', await page.evaluate(() => !window.DTFocus))
+  const qbox = await page.evaluate(() => {
+    const r = document.querySelector('#q').getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  await page.mouse.click(qbox.x, qbox.y)
+  await sleep(200)
+  ok('点输入框才聚焦', (await ae()) === 'q', await ae())
 }
 
 console.log('\n=== 2. 文档渲染 ===')
@@ -147,6 +155,72 @@ if (pdfDoc) {
   const drawn = await page.evaluate(() => document.querySelectorAll('.page[data-drawn="1"]').length)
   ok('至少一页画布已绘制', drawn > 0, 'drawn=' + drawn)
 
+  // 方向键翻页（v170）：焦点只在点输入框时才进来，点页面之后方向键归 viewer
+  {
+    // 先点页面（焦点离开输入框）
+    const pageBox = await page.evaluate(() => {
+      const r = document.querySelector('.page').getBoundingClientRect()
+      return { x: r.left + 30, y: r.top + 30 }
+    })
+    await page.mouse.click(pageBox.x, pageBox.y)
+    await sleep(250)
+    const left = await ae()
+    ok('点页面后焦点离开输入框', left !== 'q', left)
+
+    const scrollable = await page.evaluate(() => {
+      const sc = document.querySelector('#page-scroll')
+      return sc.scrollHeight > sc.clientHeight + 4
+    })
+    if (scrollable) {
+      const before = await page.evaluate(() => document.querySelector('#page-scroll').scrollTop)
+      await page.keyboard.press('ArrowDown')
+      await sleep(350)
+      const after = await page.evaluate(() => document.querySelector('#page-scroll').scrollTop)
+      ok('焦点不在输入框时：ArrowDown 滚动页面', after > before, `${before} → ${after}`)
+    } else {
+      const routed = await page.evaluate(() => {
+        const ev = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
+        document.body.dispatchEvent(ev)
+        return ev.defaultPrevented
+      })
+      ok('焦点不在输入框时：方向键交给 viewer', routed === true, 'single-page pdf')
+    }
+
+    const total = await page.evaluate(() => document.querySelectorAll('.page').length)
+    if (total > 1) {
+      const p1 = await page.evaluate(() => Number(document.querySelector('#page-input')?.value || 1))
+      await page.keyboard.press('ArrowRight')
+      await sleep(350)
+      const p2 = await page.evaluate(() => Number(document.querySelector('#page-input')?.value || 1))
+      ok('焦点不在输入框时：ArrowRight 翻到下一页', p2 > p1, `${p1} → ${p2.page}`)
+    } else {
+      console.log('  (skip: 单页 PDF，跳过 ArrowRight 翻页断言)')
+    }
+
+    // 点输入框：这是唯一的聚焦入口；此后方向键归输入框（浏览器默认行为，不该被 preventDefault）
+    const qb = await page.evaluate(() => {
+      const r = document.querySelector('#q').getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+    })
+    await page.mouse.click(qb.x, qb.y)
+    await sleep(200)
+    ok('点输入框后焦点在输入框', (await ae()) === 'q', await ae())
+    const inBox = await page.evaluate(() => {
+      const q = document.querySelector('#q')
+      q.value = '有字时方向键不翻页'
+      q.setSelectionRange(q.value.length, q.value.length)
+      const ev = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
+      q.dispatchEvent(ev)
+      return { prevented: ev.defaultPrevented, value: q.value }
+    })
+    ok('输入框内方向键不被 viewer 拦截', inBox.prevented === false, JSON.stringify(inBox))
+    ok('输入内容不受影响', inBox.value.includes('有字时方向键不翻页'), inBox.value)
+    await page.evaluate(() => {
+      document.querySelector('#q').value = ''
+      document.querySelector('#page-scroll').scrollTop = 0
+    })
+    await sleep(150)
+  }
   // 拖选 PDF 文字后直接打字（v163 回归）：不能丢焦点、第一个字符也不能丢
   await page.evaluate(() => {
     document.querySelector('#q').value = ''
@@ -176,7 +250,11 @@ if (pdfDoc) {
     ok('拖选只弹浮层，不立刻挂锚点', held.chip === false && held.floatVisible === true, JSON.stringify(held))
     ok('浮层是「用这段提问」', held.floatText.includes('用这段提问'), held.floatText)
 
-    // 点浮层之后才真正挂上引用
+    // v170：选中文字不会把焦点搬进输入框
+    const afterSelect = await ae()
+    ok('拖选后焦点没有被搬进输入框', afterSelect !== 'q', afterSelect)
+
+    // 点浮层之后才真正挂上引用（但也不搬焦点）
     const fb = await page.evaluate(() => {
       const b = document.querySelector('#float-menu button')
       if (!b) return null
@@ -194,13 +272,19 @@ if (pdfDoc) {
     }))
     ok('点「用这段提问」后才挂上引用', armed.chip === true, JSON.stringify(armed))
     ok('引用 chip 带上了选中的文字', armed.text.includes('第 1 页'), armed.text)
-    ok('点浮层后焦点回输入框', armed.ae === 'q', armed.ae)
+    ok('点浮层不抢焦点', armed.ae !== 'q', armed.ae)
 
+    // 想输入就点输入框 —— 这是唯一的聚焦入口
+    const qb2 = await page.evaluate(() => {
+      const r = document.querySelector('#q').getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+    })
+    await page.mouse.click(qb2.x, qb2.y)
+    await sleep(200)
     await page.keyboard.type('ab')
     await sleep(400)
     const typed = await page.evaluate(() => ({ ae: document.activeElement?.id || document.activeElement?.tagName, value: document.querySelector('#q').value }))
-    ok('拖选后直接打字：焦点回到输入框', typed.ae === 'q', JSON.stringify(typed))
-    ok('拖选后直接打字：第一个字符不丢', typed.value === 'ab', JSON.stringify(typed))
+    ok('点输入框后可以输入', typed.ae === 'q' && typed.value.includes('ab'), JSON.stringify(typed))
     // 清掉 chip，别影响后面的提问用例
     await page.evaluate(() => {
       document.querySelector('#anchor-chip .chip-x')?.click()
@@ -221,7 +305,20 @@ if (pdfDoc) {
   await sleep(1200)
   const hasSheet = await page.evaluate(() => Boolean(document.querySelector('#sheet')))
   ok('txt 文档渲染成 sheet', hasSheet)
-  ok('切换文档后焦点回输入框', (await ae()) === 'q', await ae())
+  // 先把焦点从输入框移开，再切一次文档（PDF → 回 txt）：不应该被自动搬回输入框
+  await page.evaluate(() => document.activeElement?.blur?.())
+  await sleep(150)
+  if (pdfDoc) {
+    await page.evaluate((id) => {
+      document.querySelector(`#doc-list .doc-item[data-id="${id}"]`)?.click()
+    }, pdfDoc.id)
+    await sleep(900)
+  }
+  await page.evaluate((id) => {
+    document.querySelector(`#doc-list .doc-item[data-id="${id}"]`)?.click()
+  }, txtDoc.id)
+  await sleep(900)
+  ok('切换文档不会自动抢焦点', (await ae()) !== 'q', await ae())
 }
 
 console.log('\n=== 3. 提问（真 UI + 假模型） ===')
@@ -269,7 +366,7 @@ console.log('\n=== 3. 提问（真 UI + 假模型） ===')
   ok('粘贴图片不会导入成文档', docsBefore === docsAfter, `${docsBefore} → ${docsAfter}`)
   ok('粘贴的图片挂在输入框上', pasted.hidden === false && pasted.isDataUrl, JSON.stringify(pasted))
   ok('图片 chip 注明会随本次提问发送', pasted.note.includes('随本次提问'), pasted.note)
-  ok('粘贴后焦点仍在输入框', pasted.focus === 'q', pasted.focus)
+  ok('粘贴图片不会搬走焦点', pasted.focus === 'q', pasted.focus)
 
   // 带上这张图发一条，服务端应把它作为 image_url 送给模型
   await page.click('#q')
@@ -307,7 +404,7 @@ console.log('\n=== 3. 提问（真 UI + 假模型） ===')
   })
   ok('「图片」按钮选图：挂到输入框而不是导入', picked.hidden === false && picked.isDataUrl, JSON.stringify(picked))
   ok('选图后文档数不变', picked.docs === docsBeforePick, `${docsBeforePick} → ${picked.docs}`)
-  ok('选图后焦点回到输入框', picked.focus === 'q', picked.focus)
+  ok('选图按钮不会自动抢焦点', picked.focus !== 'q', picked.focus)
   ok('选图后 file input 已重置（可连续选同一张）', picked.inputCleared === true)
   // 清掉这张图，避免影响后面的图片发送用例
   await page.evaluate(() => {
@@ -369,7 +466,7 @@ console.log('\n=== 3.5 复现 v147~v151 报过的问题 ===')
     armed: Boolean(document.querySelector('#tree .node.armed')),
     ae: document.activeElement?.id || document.activeElement?.tagName
   }))
-  ok('点「追问这段」之后才挂上、才聚焦', afterFloat.chipHidden === false && afterFloat.armed === true && afterFloat.ae === 'q', JSON.stringify(afterFloat))
+  ok('点「追问这段」之后才挂上（不搬焦点）', afterFloat.chipHidden === false && afterFloat.armed === true && afterFloat.ae !== 'q', JSON.stringify(afterFloat))
 
   // Bug 2：选中回答 → Ctrl+C → 点几次空白 → 点「追问」→ 不应丢光标
   await page.evaluate(() => {
@@ -403,7 +500,7 @@ console.log('\n=== 3.5 复现 v147~v151 报过的问题 ===')
     await sleep(80)
     await page.mouse.click(againBtn.x, againBtn.y)
     await sleep(350)
-    ok('Bug2：选中+复制+点空白后点「追问」焦点仍在输入框', (await ae()) === 'q', await ae())
+    ok('Bug2：点「追问」后只挂引用，不抢焦点', (await ae()) !== 'q', await ae())
     const chip = await page.evaluate(() => {
       const c = document.querySelector('#anchor-chip')
       return { hidden: c.hidden, text: c.querySelector('.chip-text')?.textContent || '' }
@@ -472,7 +569,7 @@ console.log('\n=== 3.5 复现 v147~v151 报过的问题 ===')
     ok('删除后树里没有节点', after.nodes === 0, 'nodes=' + after.nodes)
     ok('删除后待追问 chip 被清空', after.chipHidden === true)
     ok('确认框关闭', after.modalOpen === false)
-    ok('确认后焦点回到输入框', after.ae === 'q', after.ae)
+    ok('确认删除后不会自动抢焦点', after.ae !== 'q', after.ae)
   } else {
     ok('找到「删除」按钮', false)
   }
@@ -860,7 +957,7 @@ console.log('\n=== 5. 搜索 / 高亮层不吃点击 ===')
   ok('高亮层 pointer-events:none（不挡选中文字）', pe === 'none', pe)
   await page.keyboard.press('Escape')
   await sleep(300)
-  ok('Esc 关搜索后焦点回输入框', (await ae()) === 'q', await ae())
+  ok('Esc 关搜索后不抢焦点', (await ae()) !== 'q', await ae())
 }
 
 console.log('\n=== 6. 输入框自增高 ===')
@@ -879,19 +976,21 @@ console.log('\n=== 6. 输入框自增高 ===')
   })
 }
 
-console.log('\n=== 7. 点击后焦点（回归） ===')
+console.log('\n=== 7. 焦点规则：只有点输入框才聚焦 ===')
 {
+  // 点各种按钮/空白：都不应该把焦点搬进输入框
   for (const [name, sel] of [
     ['点「联网」', '#btn-web'],
     ['点「缩放+」', '#btn-zoom-in'],
-    ['点「导出」', '#btn-export']
+    ['点「导出」', '#btn-export'],
+    ['点输入框上方空白', '#composer .composer-foot']
   ]) {
     const hit = await click(sel)
     if (!hit) {
-      ok(name + ' 后焦点仍在输入框', false, '按钮不存在')
+      ok(name + ' 后不抢焦点', false, '按钮不存在')
       continue
     }
-    ok(name + ' 后焦点仍在输入框', (await ae()) === 'q', await ae())
+    ok(name + ' 后焦点不在输入框', (await ae()) !== 'q', await ae())
   }
   await click('#btn-web') // 关掉联网
   const treeBox = await page.evaluate(() => {
@@ -900,7 +999,24 @@ console.log('\n=== 7. 点击后焦点（回归） ===')
   })
   await page.mouse.click(treeBox.x, treeBox.y)
   await sleep(300)
-  ok('点追问树空白后焦点回输入框', (await ae()) === 'q', await ae())
+  ok('点追问树空白后焦点不在输入框', (await ae()) !== 'q', await ae())
+
+  // 点输入框：唯一入口
+  const qb = await page.evaluate(() => {
+    const r = document.querySelector('#q').getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  await page.mouse.click(qb.x, qb.y)
+  await sleep(200)
+  ok('点输入框后焦点在输入框', (await ae()) === 'q', await ae())
+  await page.keyboard.type('焦点测试')
+  const typed = await page.evaluate(() => document.querySelector('#q').value)
+  ok('点输入框后可以正常打字', typed.includes('焦点测试'), typed)
+  await page.evaluate(() => {
+    const q = document.querySelector('#q')
+    q.value = ''
+    q.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 }
 
 console.log('\n=== 8. 设置弹窗 ===')
@@ -910,7 +1026,7 @@ console.log('\n=== 8. 设置弹窗 ===')
   ok('设置打开', await page.evaluate(() => !document.querySelector('#settings').hidden))
   await click('#cfg-cancel')
   await sleep(300)
-  ok('关设置后焦点回输入框', (await ae()) === 'q', await ae())
+  ok('关设置后不自动抢焦点', (await ae()) !== 'q', await ae())
 }
 
 await browser.close()

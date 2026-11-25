@@ -1,7 +1,7 @@
-# 交接文档 · DocTree v169（APP 1.0.59）
+# 交接文档 · DocTree v170（APP 1.0.60）
 
 > 写于 2026-11-25。上一份交接是 `HANDOFF-v147.md`（回滚点时代的记录），本文取代它作为**当前状态**。
-> 本次跨度：**v152 → v169**（1.0.42 → 1.0.59），共 15 个提交。
+> 本次跨度：**v152 → v170**（1.0.42 → 1.0.60）。
 
 ---
 
@@ -9,11 +9,11 @@
 
 | 项 | 值 |
 |---|---|
-| 源码版本 | **UI v169 / APP 1.0.59**（`package.json` 1.0.59） |
-| 安装版 | `%LOCALAPPDATA%\Programs\DocTree`，已同步 **1.0.59** |
+| 源码版本 | **UI v170 / APP 1.0.60**（`package.json` 1.0.60） |
+| 安装版 | `%LOCALAPPDATA%\Programs\DocTree`，已同步 **1.0.60** |
 | 移动端资源 | `mobile/www` 已按 v169 重建（含 `modules/`） |
-| git | 仓库在项目根，`1daeff0`，tag `v152-before-refactor` … `v169`，工作区干净 |
-| 测试 | `npm test` → **API 91/91 + UI 98/98**；Electron **15/15**（手动，见 §6） |
+| git | 仓库在项目根，tag `v152-before-refactor` … `v170`，工作区干净 |
+| 测试 | `npm test` → **API 91/91 + UI 107/107**；Electron **16/16**（手动，见 §6） |
 | 未发布的端 | GitHub 公开仓库 1.0.13 / release v1.0.12 / Pages 旧版 / APK v142(1.0.36) |
 
 ### 存档位置（v169，2026-11-25 17:00）
@@ -121,6 +121,7 @@ scripts/test-{api,ui,electron}.mjs   三套自动化
 | v167 | 图标化 | 联网/图片/指令 统一 34×34 纯图标（地球/相片/`>_`） |
 | v168 | 微调 | 图标 17→21px（按钮内占比 62%） |
 | v169 | 文档选区 | 选中只出浮层，点「用这段提问」才挂锚点（不再选中即挂） |
+| v170 | 焦点规则 | 删除 focus.js 与全部自动回焦；**只有鼠标点输入框才聚焦**；方向键/翻页回归 |
 
 每版细节见 `docs/v1xx-*.md`（18 篇）。v153 的结构/安全总账在 `docs/v153-upgrade.md`。
 
@@ -148,12 +149,16 @@ scripts/test-{api,ui,electron}.mjs   三套自动化
 `meta`（首帧，含 node） → 若干 `delta`（+ `reasoning`） → `done`（含 node，含 usage）。
 错误走 `{type:'error', message}`；前端 `readSSE` 按 `\n\n` 分帧。
 
-### 4.5 焦点规则（`focus.js`）
+### 4.5 焦点规则（v170 起极简）
 
-- 窗口激活状态以主进程 `dt:win-state/dt:win-focus/dt:win-blur` 为准（Electron 的 `document.hasFocus()` 会误报）
-- `canFocus` 依次检查：有弹窗 → 搜索条 → 移动端(`DT_LOCAL`) → 窗口激活 → 别的文本框 → （可选）选区
-- 点按钮（`FOCUS_BACK`）→ 清选区 + 回焦；**有选区时不抢焦点**，等第一次按键由 keydown 兜底（`setRangeText` 补首字符）
-- 新增原生对话框会打断输入法，**禁止再用 `alert/confirm/prompt`**，用 `uiConfirm()`
+**唯一规则：鼠标点输入框区域（`#composer` / `#q`）才会让焦点进入 `#q`。**
+
+- `public/modules/focus.js` 已删除；不再有"点任意处回焦 / 窗口激活回焦 / 按键兜底抢焦"
+- 代码里**不要**再写 `#q.focus()`（唯一允许处：`#composer` 的 `pointerdown`），否则方向键翻页、选字、输入法都会再被搅乱
+- 方向键：焦点不在文本框（或 `#q` 为空）时归 viewer（滚动/翻页）；`#q` 有文字时归编辑
+- 新增原生对话框会打断输入法：**禁止 `alert/confirm/prompt`**，用 `uiConfirm()`
+- 主进程仍在发 `dt:win-state/focus/blur`（现在没人监听）；保留无害，清理时注意别动 `webContents.focus()`
+- 历史教训见 `docs/v170-focus-policy.md`
 
 ### 4.6 化学块协议（提示词 + 前端双保险）
 
@@ -240,7 +245,8 @@ npm run mobile                            # 3. 重建 mobile/www
 7. 移动端 `bootstrap.js` 的 fetch shim 不校验 `x-doctree-client`（本地无害，但和桌面语义不一致）。
 8. **Anthropic provider 暂无测试条件**（用户明确暂不处理）：`lib/llm.mjs` 里 `anthropic` 分支没有任何自动化覆盖，
    改这个文件时不要动 anthropic 的请求/解析逻辑，除非能手工验证。
-9. `lib/llm.mjs` 729 行：OpenAI / Anthropic / 流式 / 工具循环混在一起，拆分需配合上一条一起考虑。
+9. lib/llm.mjs 729 行：OpenAI / Anthropic / 流式 / 工具循环混在一起，拆分需配合上一条一起考虑。
+10. 主进程的 dt:win-state/focus/blur 消息已无监听者（焦点策略 v170 删掉了渲染端监听），可择机清理。
 
 ---
 

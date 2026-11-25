@@ -1,17 +1,16 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.59'
+import { enhanceChemBlocks } from './chem.js?v=1.0.60'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
 import { readSSE } from './modules/sse.js'
-import './modules/focus.js' // 焦点管理：副作用导入，自己注册监听
 
 // 静态资源基址：兼容「根路径」和「子路径部署」（如 GitHub Pages /doc-tree/）
 const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v169'
-const APP_VERSION = '1.0.59'
+const UI_VERSION = 'v170'
+const APP_VERSION = '1.0.60'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -530,7 +529,6 @@ function uiConfirm(text, { title = '确认', okText = '确定', danger = true } 
       m.removeEventListener('click', onBackdrop)
       document.removeEventListener('keydown', onKey)
       // 弹窗关闭后把焦点交还输入框（同时重建一次输入上下文）
-      window.DTFocus?.focus({ end: true })
       resolve(v)
     }
     const onOk = () => done(true)
@@ -1022,8 +1020,6 @@ async function openDoc(id) {
   if (savedView) restoreViewState(id, savedView, endDocSwitch)
   else requestAnimationFrame(() => requestAnimationFrame(endDocSwitch))
   // 切换文档后焦点回到输入框（以前会掉到 body，接着打中文就打不进去）
-  setTimeout(() => window.DTFocus?.focus({ end: false, respectSelection: true }), 60)
-  setTimeout(() => window.DTFocus?.focus({ end: false, respectSelection: true }), 700)
 }
 
 function beginDocSwitch() {
@@ -1549,7 +1545,6 @@ function showFloat(range, buttons) {
       hideFloat()
       try { b.run?.() } catch {}
       // 不直接发送：只把引用挂到输入框，由你决定写不写问题、何时点「发送」
-      window.DTFocus?.focus({ end: true, clearSelection: true, external: true })
       setStatus('已选中，可写问题后发送；留空直接点「发送」也行')
     })
     menu.appendChild(btn)
@@ -1737,7 +1732,6 @@ function nodeEl(n, depth, kids) {
     S.pendingParent = n.id
     S.pendingAnchor = { kind: 'answer', nodeId: n.id, quote: '', page: n.anchor?.page || currentPage() }
     updateChip()
-    window.DTFocus?.focus({ end: true, clearSelection: true, external: true })
   })
   acts.querySelector('[data-act="copy"]').addEventListener('click', async () => {
     await navigator.clipboard.writeText(n.answer || '')
@@ -1778,7 +1772,6 @@ function nodeEl(n, depth, kids) {
     }
     renderTree()
     // 原生 confirm() 会把焦点丢到 body，删完把焦点还给输入框
-    window.DTFocus?.focus({ end: true })
   })
   card.appendChild(acts)
 
@@ -1832,7 +1825,6 @@ function setInstrMode(on) {
     q.placeholder = S.instrMode
       ? '输入指令，例如：以后用英文回答 / 少用公式 / 只讲结论'
       : '选中文字后点「发送」提问，留空也行'
-    window.DTFocus?.focus({ external: true })
   }
 }
 
@@ -1939,7 +1931,6 @@ async function send(forced) {
     $('#btn-send').disabled = false
     $('#btn-stop').hidden = true
     // 发送完把焦点还给输入框：按钮被 disable 过，焦点已经掉到 body 上了
-    window.DTFocus?.focus({ end: true })
   }
 }
 
@@ -1985,7 +1976,6 @@ async function resumeNode(id) {
     S.busy = false
     $('#btn-send').disabled = false
     $('#btn-stop').hidden = true
-    window.DTFocus?.focus({ end: true })
   }
 }
 
@@ -2147,7 +2137,6 @@ function onShotUp(e) {
   toggleShot(false)
   updateChip()
   // 不直接发送：图先挂到输入框，由你决定写不写问题、何时点「发送」
-  window.DTFocus?.focus({ end: true, clearSelection: true, external: true })
   setStatus('已截取，可写问题后发送；留空直接点「发送」也行')
 }
 
@@ -2985,10 +2974,7 @@ function bindTreeView() {
 
 function bind() {
   $('#file-input').addEventListener('change', (e) => {
-    importFiles(Array.from(e.target.files || [])).finally(() => {
-      // 原生文件对话框关掉后焦点在 body，导完把焦点还回输入框
-      window.DTFocus?.focus({ end: true })
-    })
+    importFiles(Array.from(e.target.files || []))
     e.target.value = ''
   })
 
@@ -3005,13 +2991,12 @@ function bind() {
         .then((url) => {
           S.pendingShot = url
           updateChip()
-          window.DTFocus?.focus({ end: true })
           toast('图片已附上，会和这次提问一起发送')
         })
         .catch((err) => toast('图片读取失败：' + (err.message || err)))
       return
     }
-    importFiles(files).finally(() => window.DTFocus?.focus({ end: true }))
+    importFiles(files)
   })
 
   $('#cfg-update-check')?.addEventListener('change', (e) => {
@@ -3131,7 +3116,6 @@ function bind() {
     try {
       S.pendingShot = await readImageForAsk(file)
       updateChip()
-      window.DTFocus?.focus({ end: true })
       toast('图片已附上，会和这次提问一起发送')
     } catch (err) {
       toast('图片读取失败：' + (err.message || err))
@@ -3149,7 +3133,6 @@ function bind() {
     try {
       S.pendingShot = await readImageForAsk(file)
       updateChip()
-      window.DTFocus?.focus({ end: true })
       toast(items.length > 1 ? '已附上第一张图片，会和这次提问一起发送' : '图片已附上，会和这次提问一起发送')
     } catch (err) {
       toast('图片读取失败：' + (err.message || err))
@@ -3177,7 +3160,7 @@ function bind() {
   comp?.addEventListener('pointerdown', (e) => {
     if (!(e.target instanceof Element)) return
     if (e.target.closest('input, textarea, button, .chip-x')) return
-    setTimeout(() => window.DTFocus?.focus({ end: true, external: true }), 0)
+    setTimeout(() => $('#q')?.focus(), 0)
   })
   $('#btn-group')?.addEventListener('click', () => (S.selecting ? cancelSelecting() : startSelecting()))
   $('#group-create')?.addEventListener('click', createGroupFromSelection)
@@ -3192,8 +3175,6 @@ function bind() {
       const n = parseInt($('#page-input').value, 10)
       if (n) gotoPage(n)
       $('#page-input').blur()
-      // blur 之后焦点会掉到 body，直接还给输入框
-      setTimeout(() => window.DTFocus?.focus({ end: true, external: true }), 0)
     }
   })
   $('#page-input').addEventListener('blur', updatePageNav)
@@ -3308,8 +3289,27 @@ function bind() {
   })
   bindTreeView()
 
+  /*
+   * 但「输入框空着」的时候，方向键没有任何编辑意义 —— 这时应该去翻页/滚动页面。
+   * 规则：
+   *   - 组合输入（isComposing / keyCode 229）一律不拦，交给输入法；
+   *   - 弹窗里、别的输入框里不拦；
+   *   - #q 里还有文字时也不拦（要移动光标/选字）；
+   *   - 只有 #q 空着时，才把方向键让给 viewer。
+   * 这里只 preventDefault，不碰焦点，所以不会重新引入丢焦点的问题。
+   */
+  function pageKeysAllowed(e) {
+    if (e.isComposing || e.keyCode === 229) return false
+    const t = e.target
+    if (!(t instanceof Element)) return true
+    if (t.closest('.modal')) return false
+    const ctl = t.closest('input, textarea, [contenteditable="true"]')
+    if (!ctl) return true
+    if (ctl.id !== 'q') return false
+    return !$('#q').value.trim()
+  }
+
   document.addEventListener('keydown', (e) => {
-    // 这里只管快捷键；“焦点丢了还能打字”的兜底统一由文件末尾的 DTFocus 负责
     // Ctrl/Cmd +/- 缩放页面，Ctrl/Cmd 0 回到 100%
     if ((e.ctrlKey || e.metaKey) && !e.altKey && S.doc) {
       const k = e.key
@@ -3337,8 +3337,7 @@ function bind() {
     }
     if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      const t = e.target
-      if (t instanceof Element && t.closest('input, textarea, [contenteditable="true"], .modal')) return
+      if (!pageKeysAllowed(e)) return
       if (!S.doc || S.shotMode) return
       e.preventDefault()
       const sc = $('#page-scroll')
@@ -3356,8 +3355,7 @@ function bind() {
     }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      const t = e.target
-      if (t instanceof Element && t.closest('input, textarea, [contenteditable="true"], .modal')) return
+      if (!pageKeysAllowed(e)) return
       if (S.shotMode) return
       const sel = window.getSelection()
       if (sel && !sel.isCollapsed && sel.toString().trim()) return

@@ -7,7 +7,7 @@
 - 桌面壳：Electron（`desktop/main.cjs`）
 - 模型：任意 OpenAI 兼容端点；默认 `deepseek-flash`（V4.1-Flash，原生多模态，截图提问直接可用）
 - 数据：全部存在本机 `data/`
-- 版本：**UI v169 / APP 1.0.59**（变更见 [docs/v153-upgrade.md](docs/v153-upgrade.md) 与 [docs/v154-regression-fixes.md](docs/v154-regression-fixes.md)）
+- 版本：**UI v170 / APP 1.0.60**（变更见 [docs/v153-upgrade.md](docs/v153-upgrade.md) 与 [docs/v154-regression-fixes.md](docs/v154-regression-fixes.md)）
 
 ![演示](docs/demo.png)
 
@@ -139,7 +139,7 @@ data/trees/*.json      追问树
 data/files/*           原始文件
 ```
 
-> 交接：当前状态、发布/回滚流程、测试与排障见 [HANDOFF-v169.md](HANDOFF-v169.md)。
+> 交接：当前状态、发布/回滚流程、测试与排障见 [HANDOFF-v170.md](HANDOFF-v170.md)。
 
 ## 测试
 

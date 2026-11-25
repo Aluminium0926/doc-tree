@@ -35,8 +35,6 @@ const state = () =>
   page.evaluate(() => ({
     url: location.href,
     ver: document.querySelector('#settings-ver')?.textContent || '',
-    hasFocusMgr: Boolean(window.DTFocus),
-    fm: window.DTFocus?.state,
     ae: document.activeElement?.id || document.activeElement?.tagName,
     pages: document.querySelectorAll('.page').length,
     drawn: document.querySelectorAll('.page[data-drawn="1"]').length,
@@ -48,9 +46,8 @@ await page.bringToFront()
 await sleep(600)
 const s = await state()
 ok('页面地址是本地服务', s.url.startsWith('http://127.0.0.1:'), s.url)
-ok('前端模块加载', s.hasFocusMgr && s.modules)
-ok('启动后焦点在输入框', s.ae === 'q', s.ae)
-ok('焦点桥已连上主进程', s.fm?.known === true, JSON.stringify(s.fm))
+ok('前端模块加载', s.modules)
+ok('启动后不自动抢焦点（等用户点输入框）', s.ae !== 'q', s.ae)
 
 // CSP：内联脚本应被 script-src 拦住
 const inlineRan = await page.evaluate(() => {
@@ -113,12 +110,12 @@ if (pdfId) {
   const s2 = await state()
   ok('PDF 页框渲染', s2.pages > 0, 'pages=' + s2.pages)
   ok('画布已绘制', s2.drawn > 0, 'drawn=' + s2.drawn)
-  ok('打开文档后焦点回输入框', s2.ae === 'q', s2.ae)
+  ok('打开文档不会自动抢焦点', s2.ae !== 'q', s2.ae)
 } else {
   console.log('  (skip: 列表里没有 PDF)')
 }
 
-// 点按钮后焦点仍在输入框
+// v170 焦点规则：点按钮不搬焦点；点输入框才聚焦
 const click = async (sel) => {
   const b = await page.evaluate((x) => {
     const el = document.querySelector(x)
@@ -134,8 +131,23 @@ const click = async (sel) => {
   return true
 }
 await click('#btn-web')
-ok('点「联网」后焦点仍在输入框', (await state()).ae === 'q')
-await click('#btn-web')
+ok('点「联网」后焦点不在输入框', (await state()).ae !== 'q')
+{
+  const qb = await page.evaluate(() => {
+    const r = document.querySelector('#q').getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  await page.mouse.click(qb.x, qb.y)
+  await sleep(250)
+  ok('点输入框后焦点在输入框', (await state()).ae === 'q')
+  await page.keyboard.type('焦点测试')
+  await sleep(200)
+  const val = await page.evaluate(() => document.querySelector('#q').value)
+  ok('点输入框后可以打字', val.includes('焦点测试'), val)
+  await page.evaluate(() => {
+    document.querySelector('#q').value = ''
+  })
+}
 
 const cspErrors = consoleErrors.filter((t) => /Content Security Policy|Refused to/i.test(t))
 ok('没有 CSP 违规日志', cspErrors.length === 0, cspErrors.slice(0, 3).join(' | '))
