@@ -1324,5 +1324,5 @@ button.danger:hover { background: #971a10; border-color: #971a10; color: #fff; }
 }
 .composer-foot #btn-web svg,
 .composer-foot #btn-image svg,
-.composer-foot #btn-instr svg { width: 17px; height: 17px; }
+.composer-foot #btn-instr svg { width: 21px; height: 21px; } /* 34px 按钮里占 ~62%，比之前大 25% */
 .btn-image-txt { display: none; } /* 只留图形 */

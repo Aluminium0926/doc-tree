@@ -30,3 +30,11 @@
 
 - `public/index.html`：三个按钮换成 SVG 图标，加 `aria-label`，去掉文字
 - `public/style.css`：`.composer-foot #btn-web/#btn-image/#btn-instr` 统一 34×34 图标按钮样式与高亮态
+## v168（1.0.58）· 图标再放大 25%
+
+输入框工具条三个图标按钮（联网 / 图片 / 指令）内部图标从 **17px → 21px**，
+在 34×34 的按钮里占比 62%（正好大 25%），描边观感更实。
+
+![图标](composer-icons-v168.png)
+
+`npm test` → API 91/91、UI 94/94；Electron 15/15。
