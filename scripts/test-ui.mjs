@@ -144,6 +144,40 @@ if (pdfDoc) {
   ok('PDF 页框已渲染', pages > 0, 'pages=' + pages)
   const drawn = await page.evaluate(() => document.querySelectorAll('.page[data-drawn="1"]').length)
   ok('至少一页画布已绘制', drawn > 0, 'drawn=' + drawn)
+
+  // 拖选 PDF 文字后直接打字（v163 回归）：不能丢焦点、第一个字符也不能丢
+  await page.evaluate(() => {
+    document.querySelector('#q').value = ''
+    window.getSelection()?.removeAllRanges()
+  })
+  const span = await page.evaluate(() => {
+    const s = [...document.querySelectorAll('.textLayer span')].filter((x) => (x.textContent || '').trim().length > 3)
+    if (!s.length) return null
+    const el = s[Math.min(2, s.length - 1)]
+    el.scrollIntoView({ block: 'center' })
+    const r = el.getBoundingClientRect()
+    return { x1: r.left + 2, y1: r.top + r.height / 2, x2: r.right - 2, y2: r.top + r.height / 2 }
+  })
+  if (span) {
+    await page.mouse.move(span.x1, span.y1)
+    await page.mouse.down()
+    await page.mouse.move(span.x2, span.y2, { steps: 6 })
+    await page.mouse.up()
+    await sleep(350)
+    const held = await page.evaluate(() => ({
+      sel: String(window.getSelection() || '').trim().length,
+      chip: !document.querySelector('#anchor-chip')?.hidden
+    }))
+    ok('拖选后选区保留（不抢焦点）', held.sel > 0, JSON.stringify(held))
+    ok('拖选后出现引用 chip', held.chip === true, JSON.stringify(held))
+    await page.keyboard.type('ab')
+    await sleep(400)
+    const typed = await page.evaluate(() => ({ ae: document.activeElement?.id || document.activeElement?.tagName, value: document.querySelector('#q').value }))
+    ok('拖选后直接打字：焦点回到输入框', typed.ae === 'q', JSON.stringify(typed))
+    ok('拖选后直接打字：第一个字符不丢', typed.value === 'ab', JSON.stringify(typed))
+  } else {
+    console.log('  (skip: 这个 PDF 没有文本层)')
+  }
 } else {
   console.log('  (skip: 没有 font-test.pdf)')
 }

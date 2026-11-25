@@ -154,10 +154,13 @@ document.addEventListener('click', (e) => {
   setTimeout(() => {
     if (document.querySelector('.modal:not([hidden])')) return
     if (!explicit) {
+      // 拖选完文字时把焦点抢走会连带清掉高亮（Chrome 把选区移进 textarea），
+      // 所以这里保留选区、先不回焦；用户一敲键盘，下面的 keydown 兜底负责把
+      // 第一个字符也完整送进输入框。
       const sel = window.getSelection()
-      if (sel && !sel.isCollapsed && String(sel).trim()) return // 用户正在选中文字，别抢
+      if (sel && !sel.isCollapsed && String(sel).trim()) return
     }
-    DTFocus.focus({ end: explicit, clearSelection: explicit, respectSelection: !explicit })
+    DTFocus.focus({ end: explicit, clearSelection: explicit, respectSelection: false })
   }, 0)
 }, true)
 
@@ -193,8 +196,13 @@ document.addEventListener('keydown', (e) => {
   }
   if (!DTFocus.focus({ end: true })) return
   if (e.key.length !== 1) return // 退格/回车/方向键等交给浏览器，焦点对了就行
-  // 单字符用 insertText 回放：保留光标位置、触发 input 事件
-  let inserted = false
-  try { inserted = document.execCommand('insertText', false, e.key) } catch {}
-  if (inserted) e.preventDefault()
+  // 光标刚切进输入框时 execCommand('insertText') 可能失败，导致首字符丢失；
+  // 直接改 value 并补发 input 事件，保证第一个字一定落进去。
+  try {
+    const start = q.selectionStart ?? q.value.length
+    const end = q.selectionEnd ?? q.value.length
+    q.setRangeText(e.key, start, end, 'end')
+    q.dispatchEvent(new Event('input', { bubbles: true }))
+    e.preventDefault()
+  } catch {}
 })

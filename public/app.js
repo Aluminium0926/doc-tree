@@ -1,4 +1,4 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.52'
+import { enhanceChemBlocks } from './chem.js?v=1.0.53'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
@@ -10,8 +10,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v162'
-const APP_VERSION = '1.0.52'
+const UI_VERSION = 'v163'
+const APP_VERSION = '1.0.53'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -1719,6 +1719,8 @@ function nodeEl(n, depth, kids) {
       toast('已删除，并清空挂在这条上的追问')
     }
     renderTree()
+    // 原生 confirm() 会把焦点丢到 body，删完把焦点还给输入框
+    window.DTFocus?.focus({ end: true })
   })
   card.appendChild(acts)
 
@@ -2882,14 +2884,19 @@ function bindTreeView() {
 
 function bind() {
   $('#file-input').addEventListener('change', (e) => {
-    importFiles(Array.from(e.target.files || []))
+    importFiles(Array.from(e.target.files || [])).finally(() => {
+      // 原生文件对话框关掉后焦点在 body，导完把焦点还回输入框
+      window.DTFocus?.focus({ end: true })
+    })
     e.target.value = ''
   })
 
   window.addEventListener('dragover', (e) => e.preventDefault())
   window.addEventListener('drop', (e) => {
     e.preventDefault()
-    if (e.dataTransfer?.files?.length) importFiles(Array.from(e.dataTransfer.files))
+    if (e.dataTransfer?.files?.length) {
+      importFiles(Array.from(e.dataTransfer.files)).finally(() => window.DTFocus?.focus({ end: true }))
+    }
   })
 
   $('#cfg-update-check')?.addEventListener('change', (e) => {
