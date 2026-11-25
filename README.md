@@ -140,6 +140,7 @@ data/files/*           原始文件
 ```
 
 > 交接：当前状态、发布/回滚流程、测试与排障见 [HANDOFF-v170.md](HANDOFF-v170.md)。
+> 下载：Windows / Android / Web 见 [Release v170](https://github.com/Aluminium0926/doc-tree/releases/tag/v170)。
 
 ## 测试
 

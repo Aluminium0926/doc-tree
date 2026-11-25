@@ -7,6 +7,9 @@
 
 ## 0. 一句话现状
 
+> 已发布：GitHub Release [v170](https://github.com/Aluminium0926/doc-tree/releases/tag/v170)（Windows/Android/Web 三包），Web 版在 https://aluminium0926.github.io/doc-tree/ 。
+> 注意：远程 main 仍是旧的 1.0.13；本次代码推到分支 `release/v1.0.60` + tag `v170`，没有 force-push main。
+
 | 项 | 值 |
 |---|---|
 | 源码版本 | **UI v170 / APP 1.0.60**（`package.json` 1.0.60） |
@@ -231,6 +234,8 @@ npm run mobile                            # 3. 重建 mobile/www
 **对外发布（目前都还是旧的）**：GitHub 仓库 1.0.13、Releases v1.0.12、Pages、Android APK 1.0.36。
 要发的话：`npm run dist`（便携包）→ 删掉 `release\DocTree-win32-x64` 里 0.2.0/v24 的远古产物；
 `mobile\publish-pages.ps1`（Pages）；`mobile\build-apk.ps1`（APK，需要 `mobile-build\` 里的 Android SDK）。
+
+**macOS 打包**：当前未签名，Windows 上不能产出可用 `.app`。完整步骤、arm64/x64 原生依赖风险和验收清单见 `docs/BUILD-macOS.md`。
 
 ---
 
