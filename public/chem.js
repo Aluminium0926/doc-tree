@@ -153,13 +153,12 @@ function parseBlock(kind, raw) {
   }
 }
 
-function principalAngleDeg(molblock) {
+function molPoints(molblock) {
   try {
     const lines = String(molblock || '').split(/\r?\n/)
-    if (lines.length < 5) return 0
-    const counts = lines[3].trim().split(/\s+/)
-    const n = Number(counts[0])
-    if (!n) return 0
+    if (lines.length < 5) return null
+    const n = Number(lines[3].trim().split(/\s+/)[0])
+    if (!n) return null
     const pts = []
     for (let i = 0; i < n; i++) {
       const p = lines[4 + i].trim().split(/\s+/)
@@ -167,25 +166,29 @@ function principalAngleDeg(molblock) {
       const y = Number(p[1])
       if (Number.isFinite(x) && Number.isFinite(y)) pts.push([x, y])
     }
-    if (pts.length < 3) return 0
-    const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length
-    const my = pts.reduce((s, p) => s + p[1], 0) / pts.length
-    let sxx = 0
-    let syy = 0
-    let sxy = 0
-    for (const [x, y] of pts) {
-      const dx = x - mx
-      const dy = y - my
-      sxx += dx * dx
-      syy += dy * dy
-      sxy += dx * dy
-    }
-    const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy)
-    const deg = (angle * 180) / Math.PI
-    return Number.isFinite(deg) ? Math.max(-90, Math.min(90, deg)) : 0
+    return pts.length >= 2 ? pts : null
   } catch {
-    return 0
+    return null
   }
+}
+
+// 主惯性轴（PCA）角度：长轴方向。用它生成“长轴水平”和“长轴垂直”两个候选。
+function principalAngleDeg(pts) {
+  if (!pts || pts.length < 3) return 0
+  const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length
+  const my = pts.reduce((s, p) => s + p[1], 0) / pts.length
+  let sxx = 0
+  let syy = 0
+  let sxy = 0
+  for (const [x, y] of pts) {
+    const dx = x - mx
+    const dy = y - my
+    sxx += dx * dx
+    syy += dy * dy
+    sxy += dx * dy
+  }
+  const deg = (0.5 * Math.atan2(2 * sxy, sxx - syy) * 180) / Math.PI
+  return Number.isFinite(deg) ? Math.max(-90, Math.min(90, deg)) : 0
 }
 
 function cropMoleculeSvg(svg) {
@@ -212,34 +215,65 @@ function cropMoleculeSvg(svg) {
   }
 }
 
-async function moleculeSvg(source, bond = 18) {
-  const key = bond + ':' + source
+/*
+ * 结构方向选择算法
+ * -----------------
+ * 目标：让分子在版面上“横着占满”（比如甲基橙的 N=N 水平），而不是竖成一条，
+ * 把两侧留白浪费掉；同时别把小分子放大成糊满整张卡。
+ *
+ * 1. 从 molblock 取原子坐标，算 PCA 主轴角 a（长轴方向）。
+ * 2. 生成候选旋转角：-a（长轴转水平）、90-a（长轴转垂直），外加 0°（RDKit 默认布局），去重。
+ * 3. 每个候选按固定键长（单分子 30 / 反应组分 18）渲染，裁切出真实包围盒 (w,h)。
+ * 4. 排序：宽高比 w/h 越大越好（越横越省纵向空间）；
+ *    比值接近时，比“按可用框能画多大”（scale），再接近就取更宽的。
+ * 5. 落地尺寸：scale = min(可用宽/ w, 高度上限 / h, 1.5)，
+ *    1.5 倍上限保证三五个原子的分子不会被放大成巨幅。
+ */
+const UPSCALE_MAX = 1.5 // 显示时最多放大到原始绘制的 1.5 倍，避免三原子分子糊满整张卡
+
+async function moleculeSvg(source, { bond = 30, availW = 460, maxH = 420 } = {}) {
+  const bucket = Math.round(availW / 80)
+  const key = `b${bond}:${bucket}:${source}`
   if (molCache.has(key)) return molCache.get(key)
+
   const rdkit = await getRDKit()
   const mol = rdkit.get_mol(source)
   if (!mol) throw new Error('SMILES 无法解析：' + source.slice(0, 60))
-  let angle = 0
-  try {
-    angle = principalAngleDeg(mol.get_molblock())
-  } catch {}
+
   const candidates = []
   try {
-    for (const rotate of [-angle, 90 - angle]) {
-      const raw = mol.get_svg_with_highlights(
-        JSON.stringify({ width: 1400, height: 1400, fixedBondLength: bond, rotate })
-      )
+    const pts = molPoints(mol.get_molblock())
+    const base = principalAngleDeg(pts)
+    const angles = []
+    for (const a of [-base, 90 - base, 0]) {
+      const norm = Math.round((((a % 360) + 360) % 360) * 10) / 10
+      if (!angles.includes(norm)) angles.push(norm)
+    }
+    for (const rotate of angles) {
+      const opt = { width: 1400, height: 1400, rotate, fixedBondLength: bond }
+      let raw = ''
+      try {
+        raw = mol.get_svg_with_highlights(JSON.stringify(opt))
+      } catch {
+        continue
+      }
       if (!raw || !raw.includes('<svg')) continue
       const cropped = cropMoleculeSvg(raw)
-      candidates.push({ ...cropped, rotate })
+      const aspect = cropped.w / Math.max(1, cropped.h)
+      // 落地后实际能画多大：受可用宽度、高度上限、放大倍数上限共同约束
+      const scale = Math.min(availW / cropped.w, maxH / cropped.h, UPSCALE_MAX)
+      candidates.push({ ...cropped, rotate, aspect, scale })
     }
   } finally {
     mol.delete()
   }
   if (!candidates.length) throw new Error('没有生成结构图')
-  // 主惯性轴只允许水平/垂直；在两者里选横向宽度更小的
+
   candidates.sort((a, b) => {
-    if (Math.abs(a.w - b.w) > 3) return a.w - b.w
-    return a.h - b.h
+    const da = b.aspect - a.aspect
+    if (Math.abs(da) > 0.06) return da // 明显更横的优先
+    if (Math.abs(b.scale - a.scale) > 0.01) return b.scale - a.scale // 差不多横时，画得更大的优先
+    return b.w - a.w
   })
   const best = candidates[0]
   molCache.set(key, best)
@@ -247,10 +281,13 @@ async function moleculeSvg(source, bond = 18) {
   return best
 }
 
-function fitMolecule(svgEl, maxWidth = 460) {
-  if (!svgEl) return
-  svgEl.style.maxWidth = maxWidth + 'px'
+// 显示尺寸：等比放大到填满可用宽度，但最多 1.5 倍；同时不许超过高度上限
+function fitMolecule(svgEl, item, availW, maxH = 420) {
+  if (!svgEl || !item) return
+  const scale = Math.min(availW / item.w, maxH / item.h, UPSCALE_MAX)
+  svgEl.style.width = Math.round(item.w * scale) + 'px'
   svgEl.style.height = 'auto'
+  svgEl.style.maxWidth = '100%'
 }
 
 function reactionParts(info) {
@@ -338,12 +375,14 @@ const cleanMeta = (s) => {
   return PLACEHOLDER.test(t) ? '' : t
 }
 
-async function drawSingle(fig, info, source, bond = 30) {
+async function drawSingle(fig, info, source) {
   const canvas = fig.querySelector('.chem-canvas')
-  const item = await moleculeSvg(source, bond)
+  // 用卡片实际可用宽度决定朝向和显示尺寸（换窗口/窄屏都会重新算）
+  const availW = Math.min(460, Math.max(200, Math.round((canvas?.clientWidth || 460) - 24)))
+  const item = await moleculeSvg(source, { bond: 30, availW, maxH: 420 })
   canvas.innerHTML = item.svg
-  fitMolecule(canvas.querySelector('svg'), 460)
   const svgEl = canvas.querySelector('svg')
+  fitMolecule(svgEl, item, availW, 420)
   if (svgEl) {
     svgEl.setAttribute('role', 'img')
     svgEl.setAttribute('aria-label', info.label || source)
@@ -355,7 +394,7 @@ async function drawReaction(fig, info, r) {
   r ??= reactionParts(info)
   const safe = async (s) => {
     try {
-      return await moleculeSvg(s, 18)
+      return await moleculeSvg(s, { bond: 18 })
     } catch (e) {
       return { error: String(e.message || e), source: s }
     }

@@ -533,6 +533,75 @@ console.log('\n=== 4.5 化学：真 RDKit 渲染 / 不再裁剪 / 部分失败�
   ok('占位条件“-”不渲染', placeholder && placeholder.cond === false, JSON.stringify(placeholder))
 }
 
+console.log('\n=== 4.6 单分子朝向 / 空间利用率 ===')
+{
+  // 甲基橙：线性分子，理想是“氮氮双键水平”，横向占满卡片
+  const mo = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-mo'
+    host.style.width = '520px'
+    host.innerHTML = '<pre><code class="language-smiles">label: methyl orange\nCN(C)c1ccc(/N=N/c2ccccc2)cc1</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2500))
+    const f = host.querySelector('.chem-figure')
+    const svg = f?.querySelector('.chem-canvas svg')
+    if (!svg) return { missing: true }
+    const r = svg.getBoundingClientRect()
+    const fr = f.getBoundingClientRect()
+    return {
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      aspect: Math.round((r.width / r.height) * 100) / 100,
+      figH: Math.round(fr.height),
+      state: f.dataset.state
+    }
+  })
+  ok('单个分子渲染成功', mo && !mo.missing && mo.state === 'done', JSON.stringify(mo))
+  ok('线性分子是横向的（宽高比 ≥ 2.5）', mo?.aspect >= 2.5, 'aspect=' + mo?.aspect)
+  ok('横向填满可用宽度（≥ 400px）', mo?.w >= 400, 'w=' + mo?.w)
+  ok('卡片高度不再被竖排撑长（≤ 260px）', mo?.figH <= 260, 'figH=' + mo?.figH)
+
+  // 紧凑分子：不应被强行拉横，也不该超过高度上限
+  const compact = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-compact'
+    host.style.width = '520px'
+    host.innerHTML =
+      '<pre><code class="language-smiles">label: adamantane\nC1C2CC3CC1CC(C2)C3</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2500))
+    const f = host.querySelector('.chem-figure')
+    const svg = f?.querySelector('.chem-canvas svg')
+    if (!svg) return { missing: true }
+    const r = svg.getBoundingClientRect()
+    return { w: Math.round(r.width), h: Math.round(r.height), aspect: Math.round((r.width / r.height) * 100) / 100, state: f.dataset.state }
+  })
+  ok('紧凑分子渲染成功', compact && !compact.missing && compact.state === 'done', JSON.stringify(compact))
+  ok('紧凑分子不会被压成细长条', compact?.aspect >= 0.6 && compact?.aspect <= 2.2, 'aspect=' + compact?.aspect)
+  ok('紧凑分子高度受上限约束（≤ 420px）', compact?.h <= 420, 'h=' + compact?.h)
+
+  // 窄容器：不能溢出
+  const narrow = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-narrow'
+    host.style.width = '240px'
+    host.innerHTML = '<pre><code class="language-smiles">label: methyl orange\nCN(C)c1ccc(/N=N/c2ccccc2)cc1</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2000))
+    const svg = host.querySelector('.chem-canvas svg')
+    if (!svg) return { missing: true }
+    const r = svg.getBoundingClientRect()
+    return { w: Math.round(r.width), h: Math.round(r.height) }
+  })
+  ok('窄容器里也不溢出（宽度 ≤ 可用宽度）', narrow && !narrow.missing && narrow.w <= 240, JSON.stringify(narrow))
+}
+
 console.log('\n=== 5. 搜索 / 高亮层不吃点击 ===')
 {
   await page.keyboard.down('Control')
