@@ -16,6 +16,26 @@
 | 测试 | `npm test` → **API 91/91 + UI 98/98**；Electron **15/15**（手动，见 §6） |
 | 未发布的端 | GitHub 公开仓库 1.0.13 / release v1.0.12 / Pages 旧版 / APK v142(1.0.36) |
 
+### 存档位置（v169，2026-11-25 17:00）
+
+| 存档 | 路径 | 大小 | 内容 |
+|---|---|---|---|
+| 源码快照 | `snapshots\v169\` | 0.98 MB | server / lib / public / desktop / docs + `VERSION.txt` |
+| 源码 zip | `snapshots\doctree-v169-source.zip` | 623.9 KB | 上面那份的压缩包 |
+| **完整存档** | `snapshots\doctree-v169-full-20261125-1700.zip` | **10.5 MB** | 额外含 `scripts/`（去掉了 >1MB 的历史素材）、`mobile/src` + 构建脚本、两份 HANDOFF、README |
+| git | tag `v169` @ `1daeff0`；当时 HEAD `174e945` | 36 MB | 完整提交历史，`v152-before-refactor`…`v169` 全部 tag |
+| 安装版 | `%LOCALAPPDATA%\Programs\DocTree`（`resources\app`） | ~200 MB | 1.0.59，与源码 v169 一致 |
+| 移动端产物 | `mobile\www` | 17.8 MB | v169 重建版 |
+| 用户数据 | `%APPDATA%\文档树` | 22 MB（本机） | `docs/trees/files` + config；**不随源码备份，需单独复制** |
+| 旧版安装文件 | `rollback\installed-v152\` | 小 | 仅 v152 的 4 个文件 |
+
+**回滚三种方式**
+
+1. `git reset --hard v169`（或 `git checkout v169 -- .`）→ 重新同步安装版
+2. 解压 `snapshots\doctree-v169-full-20261125-1700.zip` 覆盖源码目录
+3. 只回滚安装版：把 `snapshots\v169\` 里的文件按同名路径覆盖到 `%LOCALAPPDATA%\Programs\DocTree\resources\app`
+4. 动手前建议额外复制 `%APPDATA%\文档树` 一份（源码回滚不包含用户数据）
+
 ---
 
 ## 1. 环境与路径
@@ -218,6 +238,9 @@ npm run mobile                            # 3. 重建 mobile/www
 5. **`release/` 里是 0.2.0 / v24 的远古构建**，别拿去分发。
 6. 化学渲染：多图/极长链的朝向仍靠启发式；如需更稳，可上 RDKit 的 `compute2DCoords` 指定模板。
 7. 移动端 `bootstrap.js` 的 fetch shim 不校验 `x-doctree-client`（本地无害，但和桌面语义不一致）。
+8. **Anthropic provider 暂无测试条件**（用户明确暂不处理）：`lib/llm.mjs` 里 `anthropic` 分支没有任何自动化覆盖，
+   改这个文件时不要动 anthropic 的请求/解析逻辑，除非能手工验证。
+9. `lib/llm.mjs` 729 行：OpenAI / Anthropic / 流式 / 工具循环混在一起，拆分需配合上一条一起考虑。
 
 ---
 
