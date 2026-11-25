@@ -442,6 +442,46 @@ console.log('\n=== 4.5 化学：真 RDKit 渲染 / 不再裁剪 / 部分失败�
     ok('两侧结构中心也在同一条中线上（≤2px）', dParts <= 2, 'Δ=' + dParts.toFixed(2))
   }
 
+  // 没有 reagents、只有 conditions（用户报的“箭头飞了”场景）：箭头线仍须在正中，条件紧贴箭头
+  await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-noreagent'
+    host.innerHTML =
+      '<pre><code class="language-reaction">label: coupling\nreaction: N#[N+]c1ccccc1.CN(C)c1ccccc1>>CN(C)c1ccc(/N=N/c2ccccc2)cc1\nconditions: pH 5-7</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+  })
+  let nr = null
+  for (let i = 0; i < 40; i++) {
+    await sleep(250)
+    nr = await page.evaluate(() => {
+      const f = document.querySelector('#chem-noreagent .chem-figure')
+      if (!f || f.dataset.state === 'rendering') return null
+      const line = f.querySelector('.chem-arrow-line')
+      const cond = f.querySelector('.chem-cond-arrow')
+      if (!line) return { missing: true }
+      const lr = line.getBoundingClientRect()
+      const fr = f.querySelector('.chem-canvas').getBoundingClientRect()
+      const cr = cond?.getBoundingClientRect()
+      return {
+        lineCenter: lr.top + lr.height / 2,
+        canvasCenter: fr.top + fr.height / 2,
+        condGap: cr ? cr.top - lr.bottom : null,
+        parts: [...f.querySelectorAll('.chem-part')].map((el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2 }),
+        agents: Boolean(f.querySelector('.chem-agents'))
+      }
+    })
+    if (nr && !nr.missing) break
+  }
+  ok('没有试剂时也能找到箭头线', Boolean(nr && !nr.missing), JSON.stringify(nr))
+  if (nr && !nr.missing) {
+    const dLineParts = Math.max(...nr.parts.map((p) => Math.abs(p - nr.lineCenter)))
+    ok('没有试剂时箭头线与结构中心同线（≤2px）', dLineParts <= 2, 'Δ=' + dLineParts.toFixed(2))
+    ok('条件紧贴箭头下方（0–10px）', nr.condGap != null && nr.condGap >= 0 && nr.condGap <= 10, 'gap=' + nr.condGap)
+    ok('没有试剂时不渲染空 agents', nr.agents === false)
+  }
+
   // 左右同一个分子（模型把「分子式」写成 reaction）：不该画箭头，只画一个结构
   const same = await page.evaluate(async () => {
     const mod = await import('/chem.js')

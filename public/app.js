@@ -1,4 +1,4 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.47'
+import { enhanceChemBlocks } from './chem.js?v=1.0.48'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
@@ -10,8 +10,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v157'
-const APP_VERSION = '1.0.47'
+const UI_VERSION = 'v158'
+const APP_VERSION = '1.0.48'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)

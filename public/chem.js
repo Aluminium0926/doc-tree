@@ -385,7 +385,7 @@ async function drawReaction(fig, info, r) {
   const below = cleanMeta(info.conditions)
   canvas.innerHTML = `<div class="chem-rxn">
     <div class="chem-side">${partsHtml(r.left, leftSvgs)}</div>
-    <div class="chem-rxn-arrow">
+    <div class="chem-rxn-arrow${above || below ? ' has-labels' : ''}">
       ${above ? `<span class="chem-agents">${esc(above)}</span>` : ''}
       <span class="chem-arrow-line"></span>
       ${below ? `<span class="chem-cond-arrow">${esc(below)}</span>` : ''}

@@ -1,0 +1,5 @@
+DocTree v158 / APP 1.0.48
+构建时间: 2026-11-25
+基线: v157 / 1.0.47
+本次: 反应箭头列网格钉死行号（缺 reagents 时箭头不再飞到顶部）、has-labels 下限高度、canvas 上下 padding 对称
+测试: npm test（API 84 + UI 62）/ test-electron 15
