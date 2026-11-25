@@ -401,6 +401,96 @@ console.log('\n=== 4.5 化学：真 RDKit 渲染 / 不再裁剪 / 部分失败�
   })
   ok('部分失败时状态是 partial', partial1 === 'partial', String(partial1))
   ok('partial 不会被 15 秒看门狗覆盖成“渲染超时”', partial2 && partial2.state === 'partial' && !partial2.text.includes('渲染超时'), JSON.stringify(partial2))
+
+  // 中线对齐：+ 号、箭头线、两侧结构三者中心必须在同一条水平中线上
+  await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-align'
+    host.innerHTML =
+      '<pre><code class="language-reaction">label: align test\nreaction: Nc1ccccc1.O=N[O-]>>N#[N+]c1ccccc1\nreagents: HNO2, HCl\nconditions: 0-5 °C, aqueous</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+  }, reaction)
+  let align = null
+  for (let i = 0; i < 40; i++) {
+    await sleep(250)
+    align = await page.evaluate(() => {
+      const f = document.querySelector('#chem-align .chem-figure')
+      if (!f || f.dataset.state === 'rendering') return null
+      const mid = (el) => {
+        const r = el.getBoundingClientRect()
+        return r.top + r.height / 2
+      }
+      const plus = f.querySelector('.chem-plus')
+      const line = f.querySelector('.chem-arrow-line')
+      const parts = [...f.querySelectorAll('.chem-part')]
+      if (!plus || !line || !parts.length) return { missing: true }
+      return {
+        plus: mid(plus),
+        line: mid(line),
+        parts: parts.map(mid)
+      }
+    })
+    if (align && !align.missing) break
+  }
+  ok('找到 + 号与箭头线', Boolean(align && !align.missing), JSON.stringify(align))
+  if (align && !align.missing) {
+    const dPlusLine = Math.abs(align.plus - align.line)
+    const dParts = Math.max(...align.parts.map((p) => Math.abs(p - align.line)))
+    ok('+ 号和箭头线在同一条中线上（≤2px）', dPlusLine <= 2, 'Δ=' + dPlusLine.toFixed(2))
+    ok('两侧结构中心也在同一条中线上（≤2px）', dParts <= 2, 'Δ=' + dParts.toFixed(2))
+  }
+
+  // 左右同一个分子（模型把「分子式」写成 reaction）：不该画箭头，只画一个结构
+  const same = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const mo = 'CN(C)c1ccc(/N=N/c2ccc(S(=O)(=O)[O-])cc2)cc1'
+    const host = document.createElement('div')
+    host.id = 'chem-same'
+    host.innerHTML = '<pre><code class="language-reaction">label: methyl orange\nreaction: ' + mo + '>>' + mo + '</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2500))
+    const f = host.querySelector('.chem-figure')
+    return f
+      ? {
+          state: f.dataset.state,
+          arrow: Boolean(f.querySelector('.chem-arrow-line')),
+          parts: f.querySelectorAll('.chem-part').length,
+          svg: f.querySelectorAll('.chem-canvas svg').length
+        }
+      : { missing: true }
+  })
+  ok('左右相同：不画箭头，只画一个结构', same && !same.arrow && same.svg === 1, JSON.stringify(same))
+
+  // 没有 >> 的 reaction 块（单分子）：也不该报“反应式需要 反应物>>产物”
+  const single = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-single'
+    host.innerHTML = '<pre><code class="language-reaction">label: ethanol\nreaction: CCO</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2000))
+    const f = host.querySelector('.chem-figure')
+    return f ? { state: f.dataset.state, svg: f.querySelectorAll('.chem-canvas svg').length, text: f.textContent.slice(0, 40) } : { missing: true }
+  })
+  ok('reaction 块只写一个分子 → 按结构显示，不报错', single && single.svg === 1 && single.state === 'done', JSON.stringify(single))
+
+  // 占位条件（-、—、无）不渲染成孤零零的横杠
+  const placeholder = await page.evaluate(async () => {
+    const mod = await import('/chem.js')
+    const host = document.createElement('div')
+    host.id = 'chem-ph'
+    host.innerHTML = '<pre><code class="language-reaction">label: ph\nreaction: CCO>>CC\nconditions: -</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 2000))
+    const f = host.querySelector('.chem-figure')
+    return f ? { cond: Boolean(f.querySelector('.chem-cond-arrow')), text: f.textContent.replace(/\s+/g, ' ').slice(0, 60) } : { missing: true }
+  })
+  ok('占位条件“-”不渲染', placeholder && placeholder.cond === false, JSON.stringify(placeholder))
 }
 
 console.log('\n=== 5. 搜索 / 高亮层不吃点击 ===')

@@ -139,7 +139,11 @@ await click('#btn-web')
 
 const cspErrors = consoleErrors.filter((t) => /Content Security Policy|Refused to/i.test(t))
 ok('没有 CSP 违规日志', cspErrors.length === 0, cspErrors.slice(0, 3).join(' | '))
-ok('没有 JS 报错', consoleErrors.filter((t) => !/Autofill|DevTools/i.test(t)).length === 0, consoleErrors.slice(0, 3).join(' | '))
+// 网络类资源失败（更新检查连不上 GitHub 等）不算 JS 报错，单独排除
+const realErrors = consoleErrors.filter(
+  (t) => !/Autofill|DevTools/i.test(t) && !/Failed to load resource|net::ERR_/i.test(t)
+)
+ok('没有 JS 报错', realErrors.length === 0, realErrors.slice(0, 3).join(' | '))
 
 await browser.disconnect()
 console.log('\n=== 结果 ===')

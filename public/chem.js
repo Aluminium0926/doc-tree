@@ -324,8 +324,35 @@ function makeFigure(kind, raw) {
   return { fig, info }
 }
 
-async function drawReaction(fig, info) {
-  const r = reactionParts(info)
+// 模型有时把「分子式」写成 reaction 块（左右同一个分子），或者只写一个分子。
+// 这两种情况都不该画箭头，按单一结构显示。
+function sameSet(a, b) {
+  const norm = (arr) => arr.map((x) => x.replace(/\s+/g, '')).sort().join('.')
+  return a.length > 0 && norm(a) === norm(b)
+}
+
+// “-”“—”“无”“none”这类占位条件不该渲染成一个孤零零的横杠
+const PLACEHOLDER = /^(?:[-—–~·.。_]+|none|n\/a|null|无|空|不适用|无需)$/i
+const cleanMeta = (s) => {
+  const t = String(s || '').trim()
+  return PLACEHOLDER.test(t) ? '' : t
+}
+
+async function drawSingle(fig, info, source, bond = 30) {
+  const canvas = fig.querySelector('.chem-canvas')
+  const item = await moleculeSvg(source, bond)
+  canvas.innerHTML = item.svg
+  fitMolecule(canvas.querySelector('svg'), 460)
+  const svgEl = canvas.querySelector('svg')
+  if (svgEl) {
+    svgEl.setAttribute('role', 'img')
+    svgEl.setAttribute('aria-label', info.label || source)
+  }
+  fig.dataset.state = 'done'
+}
+
+async function drawReaction(fig, info, r) {
+  r ??= reactionParts(info)
   const safe = async (s) => {
     try {
       return await moleculeSvg(s, 18)
@@ -354,8 +381,8 @@ async function drawReaction(fig, info) {
     return
   }
 
-  const above = info.reagents || (r.agents.length ? r.agents.join(' · ') : '')
-  const below = info.conditions || ''
+  const above = cleanMeta(info.reagents || (r.agents.length ? r.agents.join(' · ') : ''))
+  const below = cleanMeta(info.conditions)
   canvas.innerHTML = `<div class="chem-rxn">
     <div class="chem-side">${partsHtml(r.left, leftSvgs)}</div>
     <div class="chem-rxn-arrow">
@@ -371,18 +398,24 @@ async function drawReaction(fig, info) {
 async function draw(fig, kind, info) {
   const canvas = fig.querySelector('.chem-canvas')
   try {
-    if (kind === 'reaction') return await drawReaction(fig, info)
-    const item = await moleculeSvg(info.source, 30)
-      canvas.innerHTML = item.svg
-    fitMolecule(canvas.querySelector('svg'), 460)
-    const svgEl = canvas.querySelector('svg')
-    if (svgEl) {
-      svgEl.setAttribute('role', 'img')
-      svgEl.setAttribute('aria-label', info.label || info.source)
+    if (kind === 'reaction') {
+      const src = String(info.source || '')
+      // 没有 > 的「反应式」其实只是一个分子（模型标错了块类型）
+      if (!src.includes('>')) {
+        fig.dataset.kind = 'smiles'
+        return await drawSingle(fig, info, src)
+      }
+      const r = reactionParts(info)
+      if (sameSet(r.left, r.right)) {
+        // 左右完全一样：模型把「分子式」写成了 reaction，画一个结构就够了，别画箭头
+        fig.dataset.kind = 'smiles'
+        return await drawSingle(fig, info, r.left.join('.'))
+      }
+      return await drawReaction(fig, info, r)
     }
-    fig.dataset.state = 'done'
+    return await drawSingle(fig, info, info.source)
   } catch (e) {
-      fig.dataset.state = 'error'
+    fig.dataset.state = 'error'
     canvas.textContent = ''
     const err = document.createElement('div')
     err.className = 'chem-error'
