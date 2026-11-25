@@ -1,4 +1,4 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.55'
+import { enhanceChemBlocks } from './chem.js?v=1.0.56'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
@@ -10,8 +10,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v165'
-const APP_VERSION = '1.0.55'
+const UI_VERSION = 'v166'
+const APP_VERSION = '1.0.56'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -2985,9 +2985,23 @@ function bind() {
   window.addEventListener('dragover', (e) => e.preventDefault())
   window.addEventListener('drop', (e) => {
     e.preventDefault()
-    if (e.dataTransfer?.files?.length) {
-      importFiles(Array.from(e.dataTransfer.files)).finally(() => window.DTFocus?.focus({ end: true }))
+    const files = Array.from(e.dataTransfer?.files || [])
+    if (!files.length) return
+    // 拖到输入框上 = 给这次提问配图；拖到别处 = 导入成文档
+    const inComposer = e.target instanceof Element && Boolean(e.target.closest('#composer'))
+    const img = files.find((f) => /^image\//.test(f.type || ''))
+    if (inComposer && img) {
+      readImageForAsk(img)
+        .then((url) => {
+          S.pendingShot = url
+          updateChip()
+          window.DTFocus?.focus({ end: true })
+          toast('图片已附上，会和这次提问一起发送')
+        })
+        .catch((err) => toast('图片读取失败：' + (err.message || err)))
+      return
     }
+    importFiles(files).finally(() => window.DTFocus?.focus({ end: true }))
   })
 
   $('#cfg-update-check')?.addEventListener('change', (e) => {
@@ -3096,6 +3110,23 @@ function bind() {
   $('#btn-shot').addEventListener('click', () => toggleShot())
   $('#btn-instr')?.addEventListener('click', () => setInstrMode(!S.instrMode))
   $('#btn-web')?.addEventListener('click', () => setWebSearch(!S.webSearch))
+
+  // 选图按钮：和粘贴图片走同一条路（挂到本次提问上，不发文档）
+  const imageInput = $('#image-input')
+  $('#btn-image')?.addEventListener('click', () => imageInput?.click())
+  imageInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 允许连续选同一张图
+    if (!file) return
+    try {
+      S.pendingShot = await readImageForAsk(file)
+      updateChip()
+      window.DTFocus?.focus({ end: true })
+      toast('图片已附上，会和这次提问一起发送')
+    } catch (err) {
+      toast('图片读取失败：' + (err.message || err))
+    }
+  })
 
   document.addEventListener('paste', async (e) => {
     const items = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/'))

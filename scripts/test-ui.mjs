@@ -252,6 +252,38 @@ console.log('\n=== 3. 提问（真 UI + 假模型） ===')
   })
   ok('带图提问发出去了', (sent?.q || '').includes('这张图'), JSON.stringify(sent))
   ok('发出后图片 chip 清空', sent?.chipHidden === true)
+  // 选图按钮：点「图片」→ 文件选择框 → 挂到本次提问（同样不导入成文档）
+  const imgPath = path.join(DATA, 'pick-me.png')
+  await fsp.writeFile(
+    imgPath,
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64'
+    )
+  )
+  const docsBeforePick = await page.evaluate(() => document.querySelectorAll('#doc-list .doc-item').length)
+  const [chooser] = await Promise.all([page.waitForFileChooser(), page.click('#btn-image')])
+  await chooser.accept([imgPath])
+  await sleep(900)
+  const picked = await page.evaluate(() => {
+    const chip = document.querySelector('#shot-chip')
+    return {
+      hidden: chip.hidden,
+      isDataUrl: String(chip.querySelector('img')?.src || '').startsWith('data:image/'),
+      docs: document.querySelectorAll('#doc-list .doc-item').length,
+      focus: document.activeElement?.id,
+      inputCleared: !document.querySelector('#image-input').value
+    }
+  })
+  ok('「图片」按钮选图：挂到输入框而不是导入', picked.hidden === false && picked.isDataUrl, JSON.stringify(picked))
+  ok('选图后文档数不变', picked.docs === docsBeforePick, `${docsBeforePick} → ${picked.docs}`)
+  ok('选图后焦点回到输入框', picked.focus === 'q', picked.focus)
+  ok('选图后 file input 已重置（可连续选同一张）', picked.inputCleared === true)
+  // 清掉这张图，避免影响后面的图片发送用例
+  await page.evaluate(() => {
+    document.querySelector('#shot-chip .chip-x').click()
+  })
+  await sleep(300)
   const parts = (lastLlmBody?.messages || []).flatMap((m) => (Array.isArray(m.content) ? m.content : []))
   ok('服务端把图片作为 image_url 送给模型', parts.some((p) => p.type === 'image_url' && String(p.image_url?.url || '').startsWith('data:image/')))
   // 清理：删掉刚才这条带图提问，后面的删除/孤儿节点用例依赖“树里只剩 1 条”

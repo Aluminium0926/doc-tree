@@ -1277,3 +1277,17 @@ button.danger { background: #b42318; border-color: #b42318; color: #fff; }
 button.danger:hover { background: #971a10; border-color: #971a10; color: #fff; }
 
 .shot-note { flex: 0 0 auto; color: var(--dim); font-size: 11px; white-space: nowrap; }
+
+/* 输入框的「图片」按钮 */
+#btn-image { display: inline-flex; align-items: center; gap: 5px; }
+#btn-image svg { flex: 0 0 auto; opacity: 0.85; }
+#btn-image:hover svg { opacity: 1; }
+@media (max-width: 720px) {
+  #btn-image .btn-image-txt { display: none; }
+}
+
+/* 待发送图片的缩略图：不再拉满整行，按比例缩到 240×96 以内 */
+#shot-chip { width: auto; align-self: flex-start; max-width: 100%; }
+.shot-thumb { flex: 0 0 auto; width: auto; max-width: 240px; max-height: 96px; }
+.shot-thumb img { display: block; width: auto; height: auto; max-width: 240px; max-height: 96px; border-radius: 6px; object-fit: contain; }
+.shot-note { margin-right: auto; }
