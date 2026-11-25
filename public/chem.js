@@ -384,6 +384,10 @@ export function enhanceChemBlocks(root) {
     if (lang !== 'smiles' && lang !== 'reaction') continue
     const raw = code.textContent || ''
     if (!raw.trim()) continue
+    // 只有 label:/conditions:、没有 SMILES 的空块：保留原代码块，
+    // 不要交给 RDKit（否则会渲染出一个空分子，报“结构图为空”——v147 用户报过）
+    const probe = parseBlock(lang, raw)
+    if (!probe.source || !probe.source.trim()) continue
     const { fig, info } = makeFigure(lang, raw)
     pre.replaceWith(fig)
     setTimeout(() => {

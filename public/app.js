@@ -1,4 +1,4 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.43'
+import { enhanceChemBlocks } from './chem.js?v=1.0.44'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
@@ -10,8 +10,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v153'
-const APP_VERSION = '1.0.43'
+const UI_VERSION = 'v154'
+const APP_VERSION = '1.0.44'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -1534,7 +1534,7 @@ function renderTree({ preserve = true } = {}) {
   }
   const kids = new Map()
   for (const n of nodes) {
-    const k = n.parentId || 'root'
+    const k = n.parentId && S.tree.nodes[n.parentId] ? n.parentId : 'root'
     if (!kids.has(k)) kids.set(k, [])
     kids.get(k).push(n)
   }
@@ -1559,7 +1559,7 @@ function renderTree({ preserve = true } = {}) {
 function kidsMap() {
   const kids = new Map()
   for (const n of Object.values(S.tree.nodes || {})) {
-    const k = n.parentId || 'root'
+    const k = n.parentId && S.tree.nodes[n.parentId] ? n.parentId : 'root'
     if (!kids.has(k)) kids.set(k, [])
     kids.get(k).push(n)
   }
@@ -1570,7 +1570,7 @@ function kidsMap() {
 function nodeDepth(id) {
   let d = 0
   let cur = S.tree.nodes[id]
-  while (cur && cur.parentId && d < 40) {
+  while (cur && cur.parentId && S.tree.nodes[cur.parentId] && d < 40) {
     d++
     cur = S.tree.nodes[cur.parentId]
   }
@@ -1709,6 +1709,15 @@ function nodeEl(n, depth, kids) {
       }
     }
     for (const id of dead) delete S.tree.nodes[id]
+    // 待追问指向被删掉的节点时必须清空：否则下一次提问会挂到一个不存在的父节点上，
+    // 新节点在树里渲染不出来（看起来像「追问按钮坏了」，v149~v150 用户报过）
+    if (S.pendingParent && dead.has(S.pendingParent)) {
+      S.pendingParent = null
+      S.pendingAnchor = null
+      S.pendingShot = null
+      updateChip()
+      toast('已删除，并清空挂在这条上的追问')
+    }
     renderTree()
   })
   card.appendChild(acts)
@@ -2097,9 +2106,19 @@ function updateChip() {
     chip.hidden = false
     const where =
       a.kind === 'answer' ? '回答片段' : a.kind === 'image' ? `第 ${a.page} 页框选` : a.page ? `第 ${a.page} 页` : '全文'
-    text.textContent = `${where} · 「${trunc(a.quote || '整段提问', 24)}」`
+    // 追问回答时 quote 是空的，直接把「这条回答的问题」显示出来，
+    // 否则永远显示“整段提问”，切换节点时看上去毫无变化（v149~v150 用户报过）
+    const pendingNode = a.kind === 'answer' && a.nodeId ? S.tree.nodes?.[a.nodeId] : null
+    const label = a.quote ? trunc(a.quote, 24) : pendingNode?.question ? trunc(pendingNode.question, 24) : '整段提问'
+    text.textContent = `${where} · 「${label}」`
   } else {
     chip.hidden = true
+  }
+
+  // 当前挂着的追问节点加高亮，点不同节点时能立刻看出变化
+  const armedId = S.pendingParent || (a?.kind === 'answer' ? a.nodeId : null)
+  for (const el of document.querySelectorAll('#tree .node')) {
+    el.classList.toggle('armed', Boolean(armedId) && el.dataset.id === armedId)
   }
 
   const sh = $('#shot-chip')

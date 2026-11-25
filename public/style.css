@@ -538,6 +538,9 @@ body.col-resizing * { cursor: col-resize !important; }
   margin-bottom: 0;
 }
 .node-card:hover { border-color: transparent; box-shadow: none; }
+/* 当前「追问」挂在这个节点上时给一条竖线，切换节点能立刻看出来 */
+.node.armed > .node-card { box-shadow: inset 3px 0 0 var(--accent); border-radius: 8px; }
+.node.armed > .node-card .node-q { color: var(--accent-2); }
 .node-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .quote {
   color: var(--accent-2);

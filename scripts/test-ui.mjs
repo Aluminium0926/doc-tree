@@ -177,6 +177,149 @@ console.log('\n=== 3. 提问（真 UI + 假模型） ===')
   ok('发送后输入框已清空', (await page.evaluate(() => document.querySelector('#q').value)) === '')
 }
 
+console.log('\n=== 3.5 复现 v147~v151 报过的问题 ===')
+{
+  // Bug 4.3 / 5：在回答里拖选文字，松手只应出现浮层，不应自动挂追问
+  const drag = await page.evaluate(() => {
+    const ans = document.querySelector('#tree .node .answer')
+    const r = document.createRange()
+    r.selectNodeContents(ans)
+    const rect = [...r.getClientRects()].find((x) => x.width > 40) || ans.getBoundingClientRect()
+    return { x1: rect.left + 4, y1: rect.top + rect.height / 2, x2: rect.left + Math.min(rect.width - 4, 140), y2: rect.top + rect.height / 2 }
+  })
+  await page.mouse.move(drag.x1, drag.y1)
+  await page.mouse.down()
+  await page.mouse.move(drag.x2, drag.y2, { steps: 6 })
+  await page.mouse.up()
+  await sleep(400)
+  const afterSel = await page.evaluate(() => ({
+    chipHidden: document.querySelector('#anchor-chip').hidden,
+    floatVisible: !document.querySelector('#float-menu').hidden,
+    armed: Boolean(document.querySelector('#tree .node.armed')),
+    selected: !window.getSelection().isCollapsed
+  }))
+  ok('Bug4.3/5：拖选回答只出浮层，不自动挂追问', afterSel.chipHidden && afterSel.floatVisible && !afterSel.armed, JSON.stringify(afterSel))
+  ok('拖选后选区仍然保留', afterSel.selected)
+  const fb = await page.evaluate(() => {
+    const b = document.querySelector('#float-menu button')
+    if (!b) return null
+    const r = b.getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  if (fb) {
+    await page.mouse.click(fb.x, fb.y)
+    await sleep(300)
+  }
+  const afterFloat = await page.evaluate(() => ({
+    chipHidden: document.querySelector('#anchor-chip').hidden,
+    armed: Boolean(document.querySelector('#tree .node.armed')),
+    ae: document.activeElement?.id || document.activeElement?.tagName
+  }))
+  ok('点「追问这段」之后才挂上、才聚焦', afterFloat.chipHidden === false && afterFloat.armed === true && afterFloat.ae === 'q', JSON.stringify(afterFloat))
+
+  // Bug 2：选中回答 → Ctrl+C → 点几次空白 → 点「追问」→ 不应丢光标
+  await page.evaluate(() => {
+    const ans = document.querySelector('#tree .node .answer')
+    const r = document.createRange()
+    r.selectNodeContents(ans)
+    const s = window.getSelection()
+    s.removeAllRanges()
+    s.addRange(r)
+  })
+  await page.keyboard.down('Control')
+  await page.keyboard.press('c')
+  await page.keyboard.up('Control')
+  const treeBox = await page.evaluate(() => {
+    const r = document.querySelector('#tree').getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height - 24 }
+  })
+  await page.mouse.click(treeBox.x, treeBox.y)
+  await sleep(150)
+  await page.mouse.click(treeBox.x, treeBox.y)
+  await sleep(150)
+  const againBtn = await page.evaluate(() => {
+    const b = document.querySelector('#tree .node .node-actions [data-act="again"]')
+    if (!b) return null
+    const r = b.getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  ok('找到「追问」按钮', Boolean(againBtn))
+  if (againBtn) {
+    await page.mouse.move(againBtn.x, againBtn.y)
+    await sleep(80)
+    await page.mouse.click(againBtn.x, againBtn.y)
+    await sleep(350)
+    ok('Bug2：选中+复制+点空白后点「追问」焦点仍在输入框', (await ae()) === 'q', await ae())
+    const chip = await page.evaluate(() => {
+      const c = document.querySelector('#anchor-chip')
+      return { hidden: c.hidden, text: c.querySelector('.chip-text')?.textContent || '' }
+    })
+    ok('Bug3：chip 显示的是这条的问题（不是“整段提问”）', chip.text.includes('这段在讲什么'), chip.text)
+    ok('Bug3：当前追问节点有 armed 高亮', await page.evaluate(() => Boolean(document.querySelector('#tree .node.armed'))))
+    ok('Bug3：选中任务结束后没有残留选区', await page.evaluate(() => window.getSelection().isCollapsed))
+  }
+
+  // Bug 4.1：只有 label/conditions 的空化学块，应该保留原代码块，不渲染空结构
+  const chem = await page.evaluate(async () => {
+    const mod = await import('/chem.js?v=1.0.43')
+    const host = document.createElement('div')
+    host.innerHTML = '<pre><code class="language-smiles">label: p-hydroxyazobenzene\nconditions: pH 7-10</code></pre>'
+    document.body.appendChild(host)
+    mod.enhanceChemBlocks(host)
+    await new Promise((r) => setTimeout(r, 600))
+    const out = {
+      figures: host.querySelectorAll('.chem-figure').length,
+      keepsPre: Boolean(host.querySelector('pre code')),
+      text: host.textContent.trim().slice(0, 40)
+    }
+    host.remove()
+    return out
+  })
+  ok('Bug4.1：空化学块不生成化学卡片', chem.figures === 0, JSON.stringify(chem))
+  ok('Bug4.1：空化学块保留原代码块', chem.keepsPre)
+
+  // Bug 3：删除节点后，指向它的待追问状态必须被清空
+  page.on('dialog', (d) => d.accept())
+  const delBtn = await page.evaluate(() => {
+    const b = document.querySelector('#tree .node .node-actions [data-act="del"]')
+    if (!b) return null
+    const r = b.getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  if (delBtn) {
+    await page.mouse.move(delBtn.x, delBtn.y)
+    await sleep(80)
+    await page.mouse.click(delBtn.x, delBtn.y)
+    await sleep(600)
+    const after = await page.evaluate(() => ({
+      nodes: document.querySelectorAll('#tree .node').length,
+      chipHidden: document.querySelector('#anchor-chip').hidden
+    }))
+    ok('删除后树里没有节点', after.nodes === 0, 'nodes=' + after.nodes)
+    ok('删除后待追问 chip 被清空', after.chipHidden === true)
+  } else {
+    ok('找到「删除」按钮', false)
+  }
+
+  // 防御：父节点已不存在的“孤儿”节点也要能渲染出来（历史数据/陈旧 pending 的兜底）
+  await page.evaluate(async (docId) => {
+    await window.fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-doctree-client': 'test' },
+      body: JSON.stringify({ docId, question: '孤儿节点测试', parentId: 'deadbeef0000', anchor: { kind: 'doc', page: 1, quote: '' } })
+    })
+  }, txtDoc.id)
+  await sleep(1500)
+  await page.reload({ waitUntil: 'load' })
+  await sleep(2000)
+  const orphan = await page.evaluate(() => ({
+    nodes: document.querySelectorAll('#tree .node').length,
+    q: document.querySelector('#tree .node .node-q')?.textContent || ''
+  }))
+  ok('孤儿节点仍能渲染（父节点不存在时挂到根）', orphan.nodes === 1, JSON.stringify(orphan))
+  ok('孤儿节点问题可见', orphan.q.includes('孤儿节点测试'), orphan.q)
+}
+
 console.log('\n=== 4. Markdown / 外链 / 代码块 ===')
 {
   const res = await page.evaluate(async () => {

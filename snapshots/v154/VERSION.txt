@@ -1,0 +1,5 @@
+DocTree v154 / APP 1.0.44
+构建时间: 2026-11-25
+基线: v153 / 1.0.43
+本次: 按 BUGS-v147~v151 复查，补历史遗留（chip 反馈/armed 高亮/删除清 pending/空化学块跳过/孤儿节点兜底）
+测试: npm test（API 81 + UI 45）/ test-electron 13
