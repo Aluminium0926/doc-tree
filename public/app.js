@@ -1,4 +1,4 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.58'
+import { enhanceChemBlocks } from './chem.js?v=1.0.59'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
@@ -10,8 +10,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v168'
-const APP_VERSION = '1.0.58'
+const UI_VERSION = 'v169'
+const APP_VERSION = '1.0.59'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -1496,10 +1496,20 @@ function markDocSelection(range, startEl, sel) {
     return
   }
 
-  S.pendingAnchor = anchor
-  S.pendingParent = null
-  updateChip()
-  showFloat(range, [{ label: '用这段提问', primary: true, act: 'ask' }])
+  // 只弹浮层，不立刻挂锚点：和回答选区的规则保持一致（v151）。
+  // 以前这里选中就写 S.pendingAnchor + updateChip，
+  // 结果 chip 一直挂着，用户点哪都以为“已经用这段提问”了。
+  showFloat(range, [
+    {
+      label: '用这段提问',
+      primary: true,
+      run: () => {
+        S.pendingAnchor = anchor
+        S.pendingParent = null
+        updateChip()
+      }
+    }
+  ])
 }
 
 function markAnswerSelection(range, startEl, sel) {

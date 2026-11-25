@@ -168,15 +168,45 @@ if (pdfDoc) {
     await sleep(350)
     const held = await page.evaluate(() => ({
       sel: String(window.getSelection() || '').trim().length,
-      chip: !document.querySelector('#anchor-chip')?.hidden
+      chip: !document.querySelector('#anchor-chip')?.hidden,
+      floatVisible: !document.querySelector('#float-menu')?.hidden,
+      floatText: document.querySelector('#float-menu')?.textContent || ''
     }))
     ok('拖选后选区保留（不抢焦点）', held.sel > 0, JSON.stringify(held))
-    ok('拖选后出现引用 chip', held.chip === true, JSON.stringify(held))
+    ok('拖选只弹浮层，不立刻挂锚点', held.chip === false && held.floatVisible === true, JSON.stringify(held))
+    ok('浮层是「用这段提问」', held.floatText.includes('用这段提问'), held.floatText)
+
+    // 点浮层之后才真正挂上引用
+    const fb = await page.evaluate(() => {
+      const b = document.querySelector('#float-menu button')
+      if (!b) return null
+      const r = b.getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+    })
+    if (fb) {
+      await page.mouse.click(fb.x, fb.y)
+      await sleep(350)
+    }
+    const armed = await page.evaluate(() => ({
+      chip: !document.querySelector('#anchor-chip')?.hidden,
+      text: document.querySelector('#anchor-chip .chip-text')?.textContent || '',
+      ae: document.activeElement?.id || document.activeElement?.tagName
+    }))
+    ok('点「用这段提问」后才挂上引用', armed.chip === true, JSON.stringify(armed))
+    ok('引用 chip 带上了选中的文字', armed.text.includes('第 1 页'), armed.text)
+    ok('点浮层后焦点回输入框', armed.ae === 'q', armed.ae)
+
     await page.keyboard.type('ab')
     await sleep(400)
     const typed = await page.evaluate(() => ({ ae: document.activeElement?.id || document.activeElement?.tagName, value: document.querySelector('#q').value }))
     ok('拖选后直接打字：焦点回到输入框', typed.ae === 'q', JSON.stringify(typed))
     ok('拖选后直接打字：第一个字符不丢', typed.value === 'ab', JSON.stringify(typed))
+    // 清掉 chip，别影响后面的提问用例
+    await page.evaluate(() => {
+      document.querySelector('#anchor-chip .chip-x')?.click()
+      document.querySelector('#q').value = ''
+    })
+    await sleep(200)
   } else {
     console.log('  (skip: 这个 PDF 没有文本层)')
   }
