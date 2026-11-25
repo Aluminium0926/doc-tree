@@ -1,0 +1,73 @@
+name: build-macos
+
+# 只产 macOS 产物（zip + dmg），不创建 Release；下载后用 gh release upload 挂到目标 Release。
+# 为什么单独一个 workflow：默认分支是旧的 1.0.13，workflow_dispatch 要求文件在默认分支上，
+# 所以这里用「打 mac-* tag」触发（tag 指向包含本文件的分支提交）。
+on:
+  push:
+    tags: ['mac-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13   # Intel
+            arch: x64
+          - os: macos-14   # Apple Silicon
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: 环境
+        run: |
+          uname -m
+          node -v
+      - name: 安装依赖（按 runner 架构装原生模块）
+        run: npm ci --legacy-peer-deps
+      - name: API 测试
+        run: npm run test:api
+      - name: 打包（未签名）
+        run: |
+          npx electron-packager . DocTree \
+            --platform=darwin \
+            --arch=${{ matrix.arch }} \
+            --out=release \
+            --overwrite \
+            --asar=false \
+            --prune=true \
+            --ignore='^/(data|build|release|scripts|docs|snapshots|rollback|mobile|mobile-build|wasm|ppt-lab|\.git|\.npm-cache)' \
+            --ignore='\.(png|log|zip|apk|dmg)$'
+      - name: 校验架构
+        run: |
+          APP="release/DocTree-darwin-${{ matrix.arch }}/DocTree.app"
+          file "$APP/Contents/MacOS/DocTree"
+          lipo -archs "$APP/Contents/MacOS/DocTree"
+          find "$APP/Contents/Resources/app/node_modules/@napi-rs" -name '*.node' -exec file {} \; || true
+      - name: zip
+        run: |
+          cd release
+          ditto -c -k --sequesterRsrc --keepParent "DocTree-darwin-${{ matrix.arch }}" "DocTree-darwin-${{ matrix.arch }}.zip"
+          ls -lh "DocTree-darwin-${{ matrix.arch }}.zip"
+      - name: dmg
+        run: |
+          bash scripts/make-dmg.sh \
+            "release/DocTree-darwin-${{ matrix.arch }}/DocTree.app" \
+            "release/DocTree-darwin-${{ matrix.arch }}.dmg" \
+            DocTree
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            release/DocTree-darwin-${{ matrix.arch }}.zip
+            release/DocTree-darwin-${{ matrix.arch }}.dmg
+          if-no-files-found: error
