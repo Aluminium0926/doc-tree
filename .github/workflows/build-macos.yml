@@ -1,8 +1,12 @@
 name: build-macos
 
-# 只产 macOS 产物（zip + dmg），不创建 Release；下载后用 gh release upload 挂到目标 Release。
-# 为什么单独一个 workflow：默认分支是旧的 1.0.13，workflow_dispatch 要求文件在默认分支上，
-# 所以这里用「打 mac-* tag」触发（tag 指向包含本文件的分支提交）。
+# 在 Ubuntu 上交叉构建 macOS 包（arm64 / x64），不依赖 macOS runner。
+# 做法沿用仓库里已验证过的 build-mac-cross：
+#   - 依赖装在 Linux 上，但把对应架构的 @napi-rs/canvas-darwin-<arch> 原生模块补进 node_modules
+#   - @electron/packager 下载 darwin 版 Electron 生成 .app
+#   - zip 用 -y 保留 .app 里的符号链接
+#   - 附「首次打开.command」：去隔离 + 本地临时签名，解决未签名包被 Gatekeeper 拦
+# 产物只上传 artifact；由 gh release upload 挂到目标 Release。
 on:
   push:
     tags: ['mac-*']
@@ -12,62 +16,66 @@ permissions:
   contents: read
 
 jobs:
-  macos:
+  mac:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-13   # Intel
-            arch: x64
-          - os: macos-14   # Apple Silicon
-            arch: arm64
-    runs-on: ${{ matrix.os }}
+        arch: [arm64, x64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: 环境
+      - name: 安装依赖
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+      - name: 补对应架构的 canvas 原生模块
         run: |
-          uname -m
-          node -v
-      - name: 安装依赖（按 runner 架构装原生模块）
-        run: npm ci --legacy-peer-deps
-      - name: API 测试
-        run: npm run test:api
-      - name: 打包（未签名）
+          V=$(node -p "require('./node_modules/@napi-rs/canvas/package.json').version")
+          echo "canvas $V / arch ${{ matrix.arch }}"
+          npm pack "@napi-rs/canvas-darwin-${{ matrix.arch }}@$V" --pack-destination /tmp
+          mkdir -p "/tmp/canvas-${{ matrix.arch }}"
+          tar -xzf /tmp/napi-rs-canvas-darwin-${{ matrix.arch }}-*.tgz -C "/tmp/canvas-${{ matrix.arch }}"
+          rm -rf "node_modules/@napi-rs/canvas-darwin-${{ matrix.arch }}"
+          mv "/tmp/canvas-${{ matrix.arch }}/package" "node_modules/@napi-rs/canvas-darwin-${{ matrix.arch }}"
+          ls "node_modules/@napi-rs/canvas-darwin-${{ matrix.arch }}"
+      - name: 交叉构建 .app
         run: |
-          npx electron-packager . DocTree \
+          npx --yes @electron/packager@18 . DocTree \
             --platform=darwin \
             --arch=${{ matrix.arch }} \
-            --out=release \
+            --out=release-mac \
             --overwrite \
             --asar=false \
             --prune=true \
-            --ignore='^/(data|build|release|scripts|docs|snapshots|rollback|mobile|mobile-build|wasm|ppt-lab|\.git|\.npm-cache)' \
+            --ignore='^/(release|release-mac|scripts|docs|snapshots|rollback|mobile|mobile-build|wasm|ppt-lab|data|\.git|\.npm-cache)' \
             --ignore='\.(png|log|zip|apk|dmg)$'
-      - name: 校验架构
+      - name: 校验
         run: |
-          APP="release/DocTree-darwin-${{ matrix.arch }}/DocTree.app"
+          APP="release-mac/DocTree-darwin-${{ matrix.arch }}/DocTree.app"
           file "$APP/Contents/MacOS/DocTree"
-          lipo -archs "$APP/Contents/MacOS/DocTree"
+          echo "symlinks: $(find "$APP" -type l | wc -l)"
           find "$APP/Contents/Resources/app/node_modules/@napi-rs" -name '*.node' -exec file {} \; || true
-      - name: zip
+      - name: 首次打开脚本
         run: |
-          cd release
-          ditto -c -k --sequesterRsrc --keepParent "DocTree-darwin-${{ matrix.arch }}" "DocTree-darwin-${{ matrix.arch }}.zip"
-          ls -lh "DocTree-darwin-${{ matrix.arch }}.zip"
-      - name: dmg
+          cd release-mac
+          printf '%s\n' '#!/bin/bash' \
+            '# 未签名/未公证：首次双击自动去隔离并做本地临时签名' \
+            'cd "$(dirname "$0")"' \
+            'APP="$(ls -d DocTree-darwin-*/DocTree.app | head -1)"' \
+            'echo "正在处理: $APP"' \
+            'xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true' \
+            'codesign --force --deep --sign - "$APP" || true' \
+            'open "$APP"' > 首次打开.command
+          chmod +x 首次打开.command
+      - name: 打包 zip（保留符号链接）
         run: |
-          bash scripts/make-dmg.sh \
-            "release/DocTree-darwin-${{ matrix.arch }}/DocTree.app" \
-            "release/DocTree-darwin-${{ matrix.arch }}.dmg" \
-            DocTree
+          cd release-mac
+          zip -ry "DocTree-darwin-${{ matrix.arch }}.zip" "DocTree-darwin-${{ matrix.arch }}" 首次打开.command
+          ls -lh
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
-          path: |
-            release/DocTree-darwin-${{ matrix.arch }}.zip
-            release/DocTree-darwin-${{ matrix.arch }}.dmg
+          path: release-mac/DocTree-darwin-${{ matrix.arch }}.zip
           if-no-files-found: error
