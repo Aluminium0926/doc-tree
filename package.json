@@ -16,7 +16,7 @@
     "e2e": "node scripts/e2e.mjs",
     "bump": "node scripts/bump-version.mjs",
     "mobile": "node mobile/build.mjs",
-    "dist": "electron-packager . DocTree --platform=win32 --arch=x64 --out=release --overwrite --asar=false --prune=true --ignore=^/release --ignore=^/\\.npm-cache --ignore=^/scripts --ignore=^/docs"
+    "dist": "powershell -ExecutionPolicy Bypass -File scripts/dist.ps1"
   },
   "license": "MIT",
   "dependencies": {

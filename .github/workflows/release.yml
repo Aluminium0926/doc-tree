@@ -1,0 +1,89 @@
+name: release
+
+# 打 tag（v*）或手动触发时，构建各端产物并挂到 GitHub Release。
+# Windows / Web / Android 在本地构建也行（见 docs/RELEASE-v1.0.60.md）；
+# macOS 必须跑在 macOS runner 上，所以这里单独做。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: API + UI 测试
+        run: npm test
+      - name: 打包 Windows 便携版
+        shell: pwsh
+        run: ./scripts/dist.ps1
+      - name: 压缩
+        shell: pwsh
+        run: Compress-Archive -Path release/DocTree-win32-x64 -DestinationPath release/DocTree-win32-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: release/DocTree-win32-x64.zip
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 打包 macOS（arm64 + x64，未签名）
+        run: npx electron-packager . DocTree --platform=darwin --arch=arm64,x64 --out=release --overwrite --asar=false --prune=true --ignore='^/(release|scripts|docs|snapshots|mobile|mobile-build|wasm|\.git|\.npm-cache)' --ignore='\.(png|log|zip|apk)$'
+      - name: 压缩
+        run: |
+          cd release
+          for d in DocTree-darwin-*; do ditto -c -k --sequesterRsrc --keepParent "$d" "$d.zip"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: release/DocTree-darwin-*.zip
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node mobile/build.mjs
+      - name: 压缩
+        run: cd mobile/www && zip -qr ../../release-web.zip . && cd ../..
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: release-web.zip
+
+  publish:
+    needs: [windows, macos, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: 收集产物
+        run: |
+          mkdir -p out
+          find artifacts -type f -exec cp {} out/ \;
+          ls -lh out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
