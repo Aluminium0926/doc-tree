@@ -211,7 +211,7 @@ npm run mobile                            # 3. 重建 mobile/www
 
 ## 8. 已知债务 / 下一步建议
 
-1. **`public/app.js` 还有 3158 行**：`S` 全局 82 字段，PDF 视图、树视图、搜索还没拆成模块。下一步优先拆 PDF 视图和树视图（有 `npm test` 兜底）。
+1. **`public/app.js` 还有 3158 行**：`S` 全局 32 个字段，PDF 视图、树视图、搜索还没拆成模块。下一步优先拆 PDF 视图和树视图（有 `npm test` 兜底）。
 2. **`mobile/src/{api,llm,websearch,extract}.js` 是 `lib/*` 的 fork**（已漂移）。要么抽 `core/` 共用，要么明确冻结移动端。
 3. **`/api/state` 每次解析所有 doc JSON**（当前 25 份，暂不慢）；文档多了再加内存索引。
 4. **`scripts/` 里 ~190 个历史脚本**，只有 3 个进 `npm test`；可以按 `_archive/` 归档。
