@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <meta name="theme-color" content="#0a0c11">
 <script src="/theme.js"></script>
-<link rel="stylesheet" href="/style.css?v=1056">
+<link rel="stylesheet" href="/style.css?v=1057">
 <link rel="stylesheet" href="/vendor/katex/katex.min.css">
 <link id="hljs-theme" rel="stylesheet" href="/vendor/highlight/atom-one-dark.min.css">
 <script src="/vendor/highlight/highlight.min.js" defer></script>
@@ -107,10 +107,10 @@
           <input id="effort" type="range" min="0" max="2" step="1" aria-label="思考强度">
           <span id="effort-label">标准</span>
         </div>
-        <button id="btn-web" class="ghost web" title="联网搜索（DeepSeek 官方 Search API，可与本地读页同时使用；约 5 元/1000 次）">联网</button>
-        <button id="btn-image" class="ghost" title="添加图片：选一张图片随这次提问一起发送（也可以直接在输入框里粘贴）"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m4 17 5-5 4.5 4.5L16 13l4 4"/></svg><span class="btn-image-txt">图片</span></button>
+        <button id="btn-web" class="ghost icon-btn" title="联网搜索（DeepSeek 官方 Search API，可与本地读页同时使用；约 5 元/1000 次）" aria-label="联网搜索"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"/><path d="M3.6 12h16.8"/><path d="M12 3.4c2.4 2.4 3.6 5.4 3.6 8.6s-1.2 6.2-3.6 8.6c-2.4-2.4-3.6-5.4-3.6-8.6s1.2-6.2 3.6-8.6Z"/></svg></button>
+        <button id="btn-image" class="ghost icon-btn" title="添加图片：随这次提问一起发送（也可以直接在输入框里粘贴）" aria-label="添加图片"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="8.6" cy="9.6" r="1.5"/><path d="m4.4 17.6 4.8-4.8 3.8 3.8 2.6-2.4 4 4"/></svg></button>
         <input id="image-input" type="file" accept="image/*" hidden>
-        <button id="btn-instr" class="ghost instr" title="指令模式：输入什么就发什么，用来改回答方式（不计入提问树）；发送「清除指令」可清空">指令</button>
+        <button id="btn-instr" class="ghost icon-btn" title="指令模式：输入什么就发什么，用来改回答方式（不计入提问树）；发送「清除指令」可清空" aria-label="指令模式"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 6.5 5.2 5.5-5.2 5.5"/><path d="M12.5 17.5h6.8"/></svg></button>
         <span id="status"></span>
         <button id="btn-stop" class="stop-btn" hidden title="停止生成"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="1" y="1" width="8" height="8" rx="1.8" fill="currentColor"/></svg></button>
         <button id="btn-send" title="发送（回车）"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
@@ -227,7 +227,7 @@
 
 <script src="/vendor/katex/katex.min.js"></script>
 <script src="/vendor/katex/mhchem.min.js"></script>
-<script type="module" src="/app.js?v=1056"></script>
+<script type="module" src="/app.js?v=1057"></script>
 <div id="theme-pop" class="theme-pop" hidden>
   <div class="tp-title">页面配色<button id="tp-close" class="tp-x" aria-label="关闭">×</button></div>
   <div class="tp-seg" id="tp-mode">

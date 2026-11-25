@@ -1291,3 +1291,38 @@ button.danger:hover { background: #971a10; border-color: #971a10; color: #fff; }
 .shot-thumb { flex: 0 0 auto; width: auto; max-width: 240px; max-height: 96px; }
 .shot-thumb img { display: block; width: auto; height: auto; max-width: 240px; max-height: 96px; border-radius: 6px; object-fit: contain; }
 .shot-note { margin-right: auto; }
+
+/* 输入框工具条：联网 / 图片 / 指令 统一成同尺寸的纯图标按钮 */
+.composer-foot #btn-web,
+.composer-foot #btn-image,
+.composer-foot #btn-instr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  gap: 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-3);
+  color: var(--dim);
+  flex: 0 0 auto;
+}
+.composer-foot #btn-web:hover,
+.composer-foot #btn-image:hover,
+.composer-foot #btn-instr:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+.composer-foot #btn-web.on,
+.composer-foot #btn-instr.on {
+  color: var(--accent-2);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.composer-foot #btn-web svg,
+.composer-foot #btn-image svg,
+.composer-foot #btn-instr svg { width: 17px; height: 17px; }
+.btn-image-txt { display: none; } /* 只留图形 */
