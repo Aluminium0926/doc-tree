@@ -313,7 +313,12 @@ console.log('\n=== 3.5 复现 v147~v151 报过的问题 ===')
   ok('Bug4.1：空化学块保留原代码块', chem.keepsPre)
 
   // Bug 3：删除节点后，指向它的待追问状态必须被清空
-  page.on('dialog', (d) => d.accept())
+  // 注意：删除确认必须是**应用内弹窗**，不能用原生 confirm（会打断输入法）
+  let nativeDialogs = 0
+  page.on('dialog', (d) => {
+    nativeDialogs++
+    d.accept()
+  })
   const delBtn = await page.evaluate(() => {
     const b = document.querySelector('#tree .node .node-actions [data-act="del"]')
     if (!b) return null
@@ -324,13 +329,30 @@ console.log('\n=== 3.5 复现 v147~v151 报过的问题 ===')
     await page.mouse.move(delBtn.x, delBtn.y)
     await sleep(80)
     await page.mouse.click(delBtn.x, delBtn.y)
-    await sleep(600)
+    await sleep(400)
+    const modal = await page.evaluate(() => {
+      const m = document.querySelector('#confirm')
+      return { open: Boolean(m && !m.hidden), text: m?.querySelector('#confirm-text')?.textContent || '' }
+    })
+    ok('删除确认是应用内弹窗', modal.open === true, JSON.stringify(modal))
+    ok('没有弹出原生 confirm', nativeDialogs === 0, 'dialogs=' + nativeDialogs)
+    const okBtn = await page.evaluate(() => {
+      const b = document.querySelector('#confirm-ok')
+      const r = b.getBoundingClientRect()
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+    })
+    await page.mouse.click(okBtn.x, okBtn.y)
+    await sleep(900)
     const after = await page.evaluate(() => ({
       nodes: document.querySelectorAll('#tree .node').length,
-      chipHidden: document.querySelector('#anchor-chip').hidden
+      chipHidden: document.querySelector('#anchor-chip').hidden,
+      modalOpen: !document.querySelector('#confirm').hidden,
+      ae: document.activeElement?.id || document.activeElement?.tagName
     }))
     ok('删除后树里没有节点', after.nodes === 0, 'nodes=' + after.nodes)
     ok('删除后待追问 chip 被清空', after.chipHidden === true)
+    ok('确认框关闭', after.modalOpen === false)
+    ok('确认后焦点回到输入框', after.ae === 'q', after.ae)
   } else {
     ok('找到「删除」按钮', false)
   }

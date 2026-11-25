@@ -1,4 +1,4 @@
-import { enhanceChemBlocks } from './chem.js?v=1.0.53'
+import { enhanceChemBlocks } from './chem.js?v=1.0.54'
 import { $, esc, trunc, formatTokens, usageLine } from './modules/util.js'
 import { renderMarkdown, enhanceCodeBlocks } from './modules/markdown.js'
 import { apiFetch, apiJson, apiStream, uploadFile, fileUrl, exportUrl } from './modules/api.js'
@@ -10,8 +10,8 @@ const VENDOR = new URL('./vendor/', import.meta.url).href
 
 const EFFORT_IDS = ['low', 'high', 'max']
 const EFFORT_LABELS = ['轻', '标准', '深度']
-const UI_VERSION = 'v163'
-const APP_VERSION = '1.0.53'
+const UI_VERSION = 'v164'
+const APP_VERSION = '1.0.54'
 const RELEASES_API = 'https://api.github.com/repos/Aluminium0926/doc-tree/releases?per_page=30'
 const RELEASES_PAGE = 'https://github.com/Aluminium0926/doc-tree/releases'
 console.log('[DocTree] UI', UI_VERSION)
@@ -506,12 +506,60 @@ async function loadState() {
   checkStaleServer()
 }
 
+/* 应用内确认框：替代 window.confirm()。
+ *
+ * 为什么不用原生 confirm：Electron 里原生模态框会打断渲染进程的输入法上下文，
+ * 关掉之后中文输入法就上不了屏（能粘贴、能删字，就是打不进汉字）。
+ * 应用内模态框没有这个问题，顺便还能跟整体样式统一。 */
+function uiConfirm(text, { title = '确认', okText = '确定', danger = true } = {}) {
+  const m = $('#confirm')
+  if (!m) return Promise.resolve(window.confirm(text))
+  $('#confirm-title').textContent = title
+  $('#confirm-text').textContent = text
+  const ok = $('#confirm-ok')
+  const cancel = $('#confirm-cancel')
+  ok.textContent = okText
+  ok.classList.toggle('danger', danger)
+  m.hidden = false
+  ok.focus()
+  return new Promise((resolve) => {
+    const done = (v) => {
+      m.hidden = true
+      ok.removeEventListener('click', onOk)
+      cancel.removeEventListener('click', onCancel)
+      m.removeEventListener('click', onBackdrop)
+      document.removeEventListener('keydown', onKey)
+      // 弹窗关闭后把焦点交还输入框（同时重建一次输入上下文）
+      window.DTFocus?.focus({ end: true })
+      resolve(v)
+    }
+    const onOk = () => done(true)
+    const onCancel = () => done(false)
+    const onBackdrop = (e) => {
+      if (e.target === m) done(false)
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        done(false)
+      } else if (e.key === 'Enter' && document.activeElement !== cancel) {
+        e.preventDefault()
+        done(true)
+      }
+    }
+    ok.addEventListener('click', onOk)
+    cancel.addEventListener('click', onCancel)
+    m.addEventListener('click', onBackdrop)
+    document.addEventListener('keydown', onKey)
+  })
+}
+
 const NO_ASK_REMOVE = 'dt:noAskRemove'
 
 function confirmRemove(title) {
   if (localStorage.getItem(NO_ASK_REMOVE) === '1') return Promise.resolve(true)
   const m = $('#ask')
-  if (!m) return Promise.resolve(window.confirm(`把《${title}》移出列表？`))
+  if (!m) return uiConfirm(`把《${title}》移出列表？`, { title: '移出列表', okText: '移出' })
   $('#ask-text').textContent = `把《${title}》移出列表？\n提问树和对话会保留，下次导入同一份文件即可恢复。`
   $('#ask-never').checked = false
   m.hidden = false
@@ -663,7 +711,7 @@ function renderLibrary() {
     })
     row.querySelector('.g-x').addEventListener('click', async (e) => {
       e.stopPropagation()
-      if (!confirm(`解散「${g.name}」？\n提问树会复制给组内每份文档，内容不会丢。`)) return
+      if (!(await uiConfirm(`解散「${g.name}」？\n提问树会复制给组内每份文档，内容不会丢。`, { title: '解散分组', okText: '解散' }))) return
       await apiFetch('/api/group/dissolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: g.id }) })
       await loadState()
       renderLibrary()
@@ -703,7 +751,7 @@ function renderLibrary() {
       })
       el.querySelector('.x').addEventListener('click', async (e) => {
         e.stopPropagation()
-        if (!confirm(`彻底删除《${d.title}》及其提问树？\n此操作不可恢复。`)) return
+        if (!(await uiConfirm(`彻底删除《${d.title}》及其提问树？\n此操作不可恢复。`, { title: '彻底删除', okText: '彻底删除' }))) return
         await apiFetch('/api/doc/purge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: d.id }) })
         await loadState()
         renderLibrary()
@@ -1691,7 +1739,7 @@ function nodeEl(n, depth, kids) {
   usageEl.hidden = !usageEl.textContent
   card.appendChild(usageEl)
   acts.querySelector('[data-act="del"]').addEventListener('click', async () => {
-    if (!confirm('删除这条追问及其子分支？')) return
+    if (!(await uiConfirm('删除这条追问及其子分支？', { title: '删除追问', okText: '删除' }))) return
     await apiFetch('/api/node/delete', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
