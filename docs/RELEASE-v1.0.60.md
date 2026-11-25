@@ -34,6 +34,8 @@
 | Windows x64 | `DocTree-v1.0.60-win32-x64.zip` | 213.6 MB | `5e6fb37503f7fa08` |
 | Android | `DocTree-v1.0.60-android.apk` | 7.27 MB | `8c2b968ad6ce40f5` |
 | Web / PWA | `DocTree-v1.0.60-web.zip` | 7.29 MB | `ed53404b52f57c6c` |
+| macOS arm64 | `DocTree-darwin-arm64.zip` | 208.1 MB | `698d7a36867c7565` |
+| macOS x64 | `DocTree-darwin-x64.zip` | 212.9 MB | `35c189796113a443` |
 
 完整校验：`release/SHA256SUMS.txt`。
 
@@ -49,8 +51,12 @@
 
 **Web**：解压后部署任意静态服务器即可（`index.html` + `assets/`）。也可以直接用线上 Pages 版本。
 
-**macOS**：需要 macOS 环境构建（Windows 上无法产出可用的 `.app`）。
-已提供 `.github/workflows/release.yml`，打 tag 或手动触发即可在 macOS runner 上产出 x64/arm64 包并挂到 Release。
+**macOS**（arm64 / x64）：解压后双击「首次打开.command」——它会去掉下载隔离并做本地临时签名，然后启动。
+- 未签名、未公证（无 Apple Developer 证书），Gatekeeper 首次会拦；脚本里的 `xattr -dr com.apple.quarantine` 就是处理这个
+- 首次打开也可：右键 App → 打开；或 系统设置 → 隐私与安全性 → 仍要打开
+- 构建方式：Ubuntu 上交叉构建（`@electron/packager` + 补对应架构的 `@napi-rs/canvas-darwin-<arch>`），
+  所以**没有 DMG**（DMG 需要 macOS 的 `hdiutil`）；zip 用 `zip -ry` 保留了 `.app` 里的符号链接
+- `.app` 内是未签名的 Electron 45 二进制；arm64 包已用 `file` 校验为 Mach-O arm64
 打包细节、产物验证和已知限制见 `docs/BUILD-macOS.md`。
 
 ## 四、测试
@@ -64,7 +70,7 @@
 ## 五、已知问题
 
 1. **中文路径**下 Electron GPU 进程崩溃（应用可能起不来）→ 用包内 `启动文档树.vbs`，或解压到英文路径
-2. **macOS 未签名**（CI 产物）：首次打开需右键 → 打开，或 `xattr -dr com.apple.quarantine DocTree.app`
+2. **macOS 未签名/未公证**（CI 交叉构建产物）：首次打开用包内「首次打开.command」，或 `xattr -dr com.apple.quarantine DocTree.app`；没有 DMG（需 macOS 才能打）
 3. **APK 为 debug 签名**，与旧版签名一致，可覆盖安装
 4. 移动端 `mobile/src/*` 仍是 `lib/*` 的分叉（长期债务，未在本版处理）
 5. Anthropic 通道仍无自动化测试（无测试条件，本版未改动其行为）
