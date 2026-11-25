@@ -139,6 +139,8 @@ data/trees/*.json      追问树
 data/files/*           原始文件
 ```
 
+> 交接：当前状态、发布/回滚流程、测试与排障见 [HANDOFF-v169.md](HANDOFF-v169.md)。
+
 ## 测试
 
 ```bash
