@@ -34,10 +34,12 @@ function ok(name, cond, extra = '') {
 const eq = (name, actual, expected) => ok(name, actual === expected, `期望 ${JSON.stringify(expected)}，实际 ${JSON.stringify(actual)}`)
 
 /* ---------------- 假模型 ---------------- */
+let lastLlmPayload = null // 用来断言系统提示词里的协议（化学块规则等）
 const mock = http.createServer(async (req, res) => {
   let raw = ''
   for await (const c of req) raw += c
   const body = JSON.parse(raw || '{}')
+  lastLlmPayload = body
   const lastUser = [...(body.messages || [])].reverse().find((m) => m.role === 'user')
   const text = '模拟回答：' + String(lastUser?.content || '').slice(0, 30)
   if (!body.stream) {
@@ -257,6 +259,15 @@ let nodeId
   nodeId = done?.node?.id
   ok('回答有内容', (done?.node?.answer || '').length > 0, done?.node?.answer)
   ok('用量已记录', Boolean(done?.node?.usage), JSON.stringify(done?.node?.usage))
+
+  // 系统提示词协议：化学块规则（单结构用 smiles、reaction 左右必须不同、空 conditions 省略）
+  const sys = (lastLlmPayload?.messages || [])
+    .filter((m) => m.role === 'system')
+    .map((m) => String(m.content || ''))
+    .join('\n')
+  ok('系统提示包含化学块协议', sys.includes('单个结构') && sys.includes('A>>A') && sys.includes('reaction'), sys.slice(0, 60))
+  ok('系统提示要求省略空 conditions', sys.includes('没有条件就整行省略'))
+  ok('系统提示要求不要拆 reactants:/products:', sys.includes('reactants:/products:'))
 
   const d = await get(`/api/doc/${docA}`)
   ok('树里存了这个节点', Boolean(d.json.tree.nodes[nodeId]))

@@ -7,7 +7,7 @@
 - 桌面壳：Electron（`desktop/main.cjs`）
 - 模型：任意 OpenAI 兼容端点；默认 `deepseek-flash`（V4.1-Flash，原生多模态，截图提问直接可用）
 - 数据：全部存在本机 `data/`
-- 版本：**UI v156 / APP 1.0.46**（变更见 [docs/v153-upgrade.md](docs/v153-upgrade.md) 与 [docs/v154-regression-fixes.md](docs/v154-regression-fixes.md)）
+- 版本：**UI v157 / APP 1.0.47**（变更见 [docs/v153-upgrade.md](docs/v153-upgrade.md) 与 [docs/v154-regression-fixes.md](docs/v154-regression-fixes.md)）
 
 ![演示](docs/demo.png)
 
