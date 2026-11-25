@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   mac:
@@ -79,3 +79,9 @@ jobs:
           name: macos-${{ matrix.arch }}
           path: release-mac/DocTree-darwin-${{ matrix.arch }}.zip
           if-no-files-found: error
+      # 直接在 GitHub 网络内挂到 Release（本机下载 220MB 太慢）
+      - name: 上传到 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: v170
+        run: gh release upload "$RELEASE_TAG" "release-mac/DocTree-darwin-${{ matrix.arch }}.zip" --clobber
