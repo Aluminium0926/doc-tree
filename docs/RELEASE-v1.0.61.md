@@ -22,10 +22,12 @@
 | Windows x64 | `DocTree-v1.0.61-win32-x64.zip` | 213.4 MB |
 | Android | `DocTree-v1.0.61-android.apk` | 7.27 MB |
 | Web / PWA | `DocTree-v1.0.61-web.zip` | 7.3 MB |
-| macOS arm64 | `DocTree-darwin-arm64.zip` | 见 Release 页 |
-| macOS x64 | `DocTree-darwin-x64.zip` | 见 Release 页 |
+| macOS arm64 | `DocTree-darwin-arm64.zip` | 208.1 MB |
+| macOS x64 | `DocTree-darwin-x64.zip` | 212.9 MB |
+| macOS arm64 | `DocTree-darwin-arm64.zip` | 208.1 MB |
+| macOS x64 | `DocTree-darwin-x64.zip` | 212.9 MB |
 
-SHA256 见 `SHA256SUMS.txt`（macOS 由 CI 构建后追加）。
+SHA256 见 `SHA256SUMS.txt`（含 macOS）。
 
 ## 三、安装 / 使用
 
