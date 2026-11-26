@@ -44,15 +44,25 @@ jobs:
           cache: npm
       - run: npm ci
       - name: 打包 macOS（arm64 + x64，未签名）
-        run: npx electron-packager . DocTree --platform=darwin --arch=arm64,x64 --out=release --overwrite --asar=false --prune=true --ignore='^/(release|scripts|docs|snapshots|mobile|mobile-build|wasm|\.git|\.npm-cache)' --ignore='\.(png|log|zip|apk)$'
+        run: npx electron-packager . DocTree --platform=darwin --arch=arm64,x64 --out=release --overwrite --asar=false --prune=true --ignore='^/(data|build|release|scripts|docs|snapshots|rollback|mobile|mobile-build|wasm|ppt-lab|\.git|\.npm-cache)' --ignore='\.(png|log|zip|apk)$'
       - name: 压缩
         run: |
           cd release
           for d in DocTree-darwin-*; do ditto -c -k --sequesterRsrc --keepParent "$d" "$d.zip"; done
+      - name: 生成 DMG（未签名）
+        run: |
+          for d in release/DocTree-darwin-*; do
+            [ -d "$d" ] || continue
+            app="$(find "$d" -maxdepth 1 -name '*.app' -print -quit)"
+            [ -n "$app" ] || continue
+            bash scripts/make-dmg.sh "$app" "release/$(basename "$d").dmg"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: release/DocTree-darwin-*.zip
+          path: |
+            release/DocTree-darwin-*.zip
+            release/DocTree-darwin-*.dmg
 
   web:
     runs-on: ubuntu-latest

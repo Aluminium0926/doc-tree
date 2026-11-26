@@ -316,7 +316,17 @@ async function moleculeSvg(source, { bond = 30, availW = 460, maxH = 420 } = {})
     const pts = molPoints(molblock)
     const raw = snapAngleDeg(pts, molBonds(molblock, pts))
     const rotate = normDeg(Math.abs(raw) <= SNAP_MAX_DEG ? raw : 0)
-    const opt = { width: 1400, height: 1400, rotate, fixedBondLength: bond }
+    // 杂原子标签字号：RDKit 默认 ~0.6×键长，课本一般更大（符号更饱满、连到杂原子的键自然更短）。
+    // 0.9 是拿课件截图（吡啶/胞嘧啶/尿嘧啶）对齐后选的：标签高度约占分子高度 16%，与课本一致。
+    const opt = {
+      width: 1400,
+      height: 1400,
+      rotate,
+      fixedBondLength: bond,
+      fixedFontSize: Math.round(bond * 0.85),
+      // 再给标签留一点内边距：键会提前收住，不会画进字母里（课本也是键贴到符号边缘就停）
+      additionalAtomLabelPadding: 0.08
+    }
     const svg = mol.get_svg_with_highlights(JSON.stringify(opt))
     if (!svg || !svg.includes('<svg')) throw new Error('没有生成结构图')
     const cropped = cropMoleculeSvg(svg)
