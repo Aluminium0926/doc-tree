@@ -83,5 +83,5 @@ jobs:
       - name: 上传到 Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: v170
+          RELEASE_TAG: v171
         run: gh release upload "$RELEASE_TAG" "release-mac/DocTree-darwin-${{ matrix.arch }}.zip" --clobber
